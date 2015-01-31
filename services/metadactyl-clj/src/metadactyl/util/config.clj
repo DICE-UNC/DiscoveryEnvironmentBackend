@@ -176,6 +176,17 @@
   [props config-valid configs]
   "metadactyl.batch.path-list.max-size")
 
+(cc/defprop-optstr keyring-path
+  "The path to the secure PGP keyring."
+  [props config-valid configs]
+  "metadactyl.pgp.keyring-path"
+  "/etc/iplant/de/crypto/secring.gpg")
+
+(cc/defprop-str key-password
+  "The password needed to unlock the PGP password."
+  [props config-valid configs]
+  "metadactyl.pgp.key-password")
+
 (defn- validate-config
   "Validates the configuration settings after they've been loaded."
   []

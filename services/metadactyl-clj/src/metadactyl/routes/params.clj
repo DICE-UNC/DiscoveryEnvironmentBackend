@@ -33,6 +33,11 @@
   (-> SecuredQueryParamsEmailRequired
     (->optional-param :email)))
 
+(s/defschema OAuthCallbackParams
+  (assoc SecuredQueryParamsRequired
+    :code  (ss/describe NonBlankString "The OAuth authorization code.")
+    :state (ss/describe String "The authorization request identifier.")))
+
 (s/defschema PagingParams
   {(s/optional-key :limit)
    (ss/describe Long

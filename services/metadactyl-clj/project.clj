@@ -25,6 +25,8 @@
                  [medley "0.5.5"]
                  [metosin/compojure-api "0.17.0"]
                  [metosin/ring-swagger-ui "2.0.24"]
+                 [mvxcvi/clj-pgp "0.8.0"]
+                 [org.iplantc/authy "4.1.5"]
                  [org.iplantc/clojure-commons "4.1.5"]
                  [org.iplantc/kameleon "4.1.5"]
                  [org.iplantc/common-cli "4.1.5"]
