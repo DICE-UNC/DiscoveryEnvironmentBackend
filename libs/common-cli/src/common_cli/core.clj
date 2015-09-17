@@ -24,7 +24,7 @@
         "Options:"
         summary]
        (string/join \newline)))
-`
+
 (defn error-msg
   "Returns the errors as a string."
   [errors]
