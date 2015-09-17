@@ -32,7 +32,7 @@ donkey.metadactyl.unprotected-base-url = http://localhost:65007
 donkey.notificationagent.base-url = http://localhost:65011
 
 # CAS Settings
-donkey.cas.cas-server  = https://cas-server.iplantcollaborative.org/cas/
+donkey.cas.cas-server  = http://${CAS_PORT_8080_TCP_ADDR}:${CAS_PORT_8080_TCP_PORT}/cas/
 donkey.cas.server-name = http://localhost:65002
 
 # The domain name to append to the user id to get the fully qualified user id.

@@ -82,6 +82,7 @@ If you only want to clean the resources directory:
 
 The following commands are also included:
 
+
     grunt shell:lein_clean
     grunt shell:lein_deps
     grunt shell:lein_uberjar

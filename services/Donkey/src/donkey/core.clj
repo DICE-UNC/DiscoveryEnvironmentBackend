@@ -245,6 +245,7 @@
   [& args]
   (tc/set-context! svc-info)
   (let [{:keys [options]} (ccli/handle-args svc-info args cli-options)]
+    ;; comment this is a destructuring...see http://blog.jayfields.com/2010/07/clojure-destructuring.html - options will contain the keys of the command line options
     (when-not (fs/exists? (:config options))
       (ccli/exit 1 (str "The config file does not exist.")))
     (when-not (fs/readable? (:config options))
