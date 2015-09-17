@@ -524,9 +524,9 @@
    "Overlays configuration settings with provided properties in environment variables - DICE  TODO: MCC"
   [props]
 
-  (doseq [keyval props] (
-      log/info (str "prop in env loop:" keyval)
-                 ))
+
+      log/info (str "prop in env loop:" props)
+
 
 
   )
