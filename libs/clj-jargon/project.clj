@@ -5,14 +5,14 @@
             :url "http://iplantcollaborative.org/sites/default/files/iPLANT-LICENSE.txt"}
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.clojure/tools.logging "0.3.1"]
-                 [org.irods.jargon/jargon-core "4.0.2.3-RELEASE"
+                 [org.irods.jargon/jargon-core "4.0.3.1-SNAPSHOT"
                   :exclusions [[org.jglobus/JGlobus-Core]
                                [org.slf4j/slf4j-api]
                                [org.slf4j/slf4j-log4j12]]]
-                 [org.irods.jargon/jargon-data-utils "4.0.2.3-RELEASE"
+                 [org.irods.jargon/jargon-data-utils "4.0.3.1-SNAPSHOT"
                   :exclusions [[org.slf4j/slf4j-api]
                                [org.slf4j/slf4j-log4j12]]]
-                 [org.irods.jargon/jargon-ticket "4.0.2.3-RELEASE"
+                 [org.irods.jargon/jargon-ticket "4.0.3.1-SNAPSHOT"
                   :exclusions [[org.slf4j/slf4j-api]
                                [org.slf4j/slf4j-log4j12]]]
                  [org.slf4j/slf4j-api "1.7.12"]
