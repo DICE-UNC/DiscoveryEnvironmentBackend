@@ -517,20 +517,6 @@
   (when-not (cc/validate-config configs config-valid)
     (throw+ {:error_code ce/ERR_CONFIG_INVALID})))
 
-
-
-
-(defn- augment-config-with-envvars
-   "Overlays configuration settings with provided properties in environment variables - DICE  TODO: MCC"
-  [props]
-
-
-      log/info (str "prop in env loop:" props)
-
-
-
-  )
-
 (defn- exception-filters
   []
   (filter #(not (nil? %))
@@ -560,7 +546,6 @@
   "Loads the configuration settings from a file."
   [cfg-path]
   (cc/load-config-from-file cfg-path props)
-  (augment-config-with-envvars props)
   (cc/log-config props :filters [#"irods\.user" #"icat\.user" #"oauth\.pem"])
   (log-environment)
   (validate-config)

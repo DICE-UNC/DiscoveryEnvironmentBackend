@@ -1,5 +1,14 @@
 # DE Backend Project
 
+## This is a fork for development of a DFC version of DE
+
+## Changes
+
+#  Upgrade Jargon and deploy to test lab #3 
+
+Upgrading Jargon on parity with the irods-cloud-browser (dev branch) of jargon 
+
+
 This project contains all of the code used in the Discovery Environment backend. That includes internally developed libraries, tools, services, database schemas and migrations, and build tool plugins.
 
 All of the code in this project was previously available as separate git repositories, but we decided to consolidate everything to make it easier to navigate.
