@@ -21,5 +21,7 @@
                  [org.iplantc/clojure-commons "5.0.0"]]
   :repositories [["dice.repository"
                   {:url "https://raw.github.com/DICE-UNC/DICE-Maven/master/releases"}]
+                 ["dice..snapshot.repository"
+                  {:url "https://raw.github.com/DICE-UNC/DICE-Maven/master/snapshots"}]
                  ["iplant.repository"
                   {:url "https://everdene.iplantcollaborative.org/archiva/repository/internal/"}]])
