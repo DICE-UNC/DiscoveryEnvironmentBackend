@@ -27,22 +27,22 @@
      (dosync (ref-set props (cp/read-properties (file filename))))
      (dosync (ref-set props (cp/read-properties (file conf-dir filename)))))))
 
-(def update-config-from-env
+(defn update-config-from-env
   "Given a set of props, inspect the environment variables by property key and update with any overriding variables of the same name"
   [props]
 
-  (dosynch
+  (dosync
 
     (let [propKeys (.keyset props)]
-      (dorun (map swap-prop-for-env-if-present (propKeys @props))))
+      (dorun (map swap-prop-for-env-if-present propKeys))
     )
   )
-
-(def swap-prop-for-env-if-present
+)
+(defn swap-prop-for-env-if-present
   "given a prop, see if that prop is an env variable, and if so, use that env variable value in the properties"
-  [propKey propRef]
+  [propKey]
 
-  (log/info "PROPKEY for Swap:" propKey"=" v)
+  (log/info "PROPKEY for Swap:" propKey)
 
   )
 
