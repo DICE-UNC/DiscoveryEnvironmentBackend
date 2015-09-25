@@ -27,6 +27,25 @@
      (dosync (ref-set props (cp/read-properties (file filename))))
      (dosync (ref-set props (cp/read-properties (file conf-dir filename)))))))
 
+(def update-config-from-env
+  "Given a set of props, inspect the environment variables by property key and update with any overriding variables of the same name"
+  [props]
+
+  (dosynch
+
+    (let [propKeys (.keyset props)]
+      (dorun (map swap-prop-for-env-if-present (propKeys @props))))
+    )
+  )
+
+(def swap-prop-for-env-if-present
+  "given a prop, see if that prop is an env variable, and if so, use that env variable value in the properties"
+  [propKey propRef]
+
+  (log/info "PROPKEY for Swap:" propKey"=" v)
+
+  )
+
 (defn masked-field?
   "Returns a truthy value if the field should be masked and a falsey value if it shouldn't."
   [field filters]

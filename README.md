@@ -4,6 +4,10 @@
 
 ## Changes
 
+#   Ad env variables to override donkey props #2 
+
+Add environment variables to properties on load to allow docker-injected properties
+
 #  Upgrade Jargon and deploy to test lab #3 
 
 Upgrading Jargon on parity with the irods-cloud-browser (dev branch) of jargon 
