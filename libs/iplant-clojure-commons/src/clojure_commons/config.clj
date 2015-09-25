@@ -34,13 +34,13 @@
   (dosync
 
     (let [propKeys (.keyset props)]
-      (dorun (map swap-prop-for-env-if-present propKeys))
+      (map swap-prop-for-env-if-present propKeys)
     )
   )
 )
 (defn swap-prop-for-env-if-present
   "given a prop, see if that prop is an env variable, and if so, use that env variable value in the properties"
-  [propKey]
+  [propKey &]
 
   (log/info "PROPKEY for Swap:" propKey)
 
