@@ -20,31 +20,28 @@
        filepath - the path to the configuration file.
        props    - the reference to the properties."
   ([filepath props]
-   (dosync (ref-set props (cp/read-properties (file filepath)))))
+    (dosync (ref-set props (cp/read-properties (file filepath)))))
 
   ([conf-dir filename props]
-   (if (nil? conf-dir)
-     (dosync (ref-set props (cp/read-properties (file filename))))
-     (dosync (ref-set props (cp/read-properties (file conf-dir filename)))))))
+    (if (nil? conf-dir)
+      (dosync (ref-set props (cp/read-properties (file filename))))
+      (dosync (ref-set props (cp/read-properties (file conf-dir filename)))))))
+
+(defn swap-prop-for-env-if-present
+  "given a prop, see if that prop is an environment variable, and if so, replace the prop value with the environment variable value"
+  [propKey propVal]
+
+  (log/info "PropKey for Swap: " propKey)
+  (if (nil? (System/getenv propKey))
+    ({propKey propVal})
+    ({propKey (System/getenv propKey)})))
 
 (defn update-config-from-env
   "Given a set of props, inspect the environment variables by property key and update with any overriding variables of the same name"
   [props]
 
   (dosync
-
-    (let [propKeys (.keyset props)]
-      (map swap-prop-for-env-if-present propKeys)
-    )
-  )
-)
-(defn swap-prop-for-env-if-present
-  "given a prop, see if that prop is an env variable, and if so, use that env variable value in the properties"
-  [propKey &]
-
-  (log/info "PROPKEY for Swap:" propKey)
-
-  )
+    (ref-set props (map swap-prop-for-env-if-present props)))
 
 (defn masked-field?
   "Returns a truthy value if the field should be masked and a falsey value if it shouldn't."
@@ -74,7 +71,7 @@
   [props & {:keys [filters]
             :or {filters []}}]
   (let [all-filters (concat filters [#"password" #"pass"])
-        log-it      #(log-prop % all-filters)]
+        log-it #(log-prop % all-filters)]
     (dorun (map log-it (sort-by key @props)))))
 
 (defn mask-config
@@ -86,7 +83,7 @@
   [props & {:keys [filters]
             :or {filters []}}]
   (let [all-filters (concat filters [#"password" #"pass"])
-        mask-it     #(mask-prop % all-filters)]
+        mask-it #(mask-prop % all-filters)]
     (into {} (mapv mask-it (sort-by key @props)))))
 
 (defn record-missing-prop
@@ -99,7 +96,7 @@
        config-valid - a ref containing a validity flag."
   [prop-name config-valid]
   (log/error "required configuration setting" prop-name "is empty or"
-             "undefined")
+    "undefined")
   (dosync (ref-set config-valid false)))
 
 (defn record-invalid-prop
@@ -137,9 +134,9 @@
        config-valid - a ref containing a validity flag.
        default      - the default property value."
   ([props prop-name config-valid]
-     (get @props prop-name ""))
+    (get @props prop-name ""))
   ([props prop-name config-valid default]
-     (get @props prop-name default)))
+    (get @props prop-name default)))
 
 (defn vector-from-prop
   "Derives a list of values from a single comma-delimited value.
@@ -167,11 +164,11 @@
        prop-name    - the name of the property.
        config-valid - a ref containing a validity flag."
   ([props prop-name config-valid]
-     (vector-from-prop (get-optional-prop props prop-name config-valid)))
+    (vector-from-prop (get-optional-prop props prop-name config-valid)))
   ([props prop-name config-valid default]
-     (if-let [string-value (get-optional-prop props prop-name config-valid nil)]
-       (vector-from-prop string-value)
-       default)))
+    (if-let [string-value (get-optional-prop props prop-name config-valid nil)]
+      (vector-from-prop string-value)
+      default)))
 
 (defn string-to-int
   "Attempts to convert a String property to an integer property.  Returns zero if the property
@@ -257,11 +254,11 @@
        config-valid - a ref containing the validity flag.
        default      - the default value."
   ([props prop-name config-valid]
-     (get-optional-integer-prop props prop-name config-valid 0))
+    (get-optional-integer-prop props prop-name config-valid 0))
   ([props prop-name config-valid default]
-     (if-let [string-value (get-optional-prop props prop-name config-valid nil)]
-       (string-to-int prop-name string-value config-valid)
-       default)))
+    (if-let [string-value (get-optional-prop props prop-name config-valid nil)]
+      (string-to-int prop-name string-value config-valid)
+      default)))
 
 (defn get-required-long-prop
   "Gets a required long property from a set of properties.  If a property is missing or not able to
@@ -287,11 +284,11 @@
        config-valid - a ref containing the vailidity flag.
        default      - the default value."
   ([props prop-name config-valid]
-     (get-optional-long-prop props prop-name config-valid 0))
+    (get-optional-long-prop props prop-name config-valid 0))
   ([props prop-name config-valid default]
-     (if-let [string-value (get-optional-prop props prop-name config-valid nil)]
-       (string-to-long prop-name string-value config-valid)
-       default)))
+    (if-let [string-value (get-optional-prop props prop-name config-valid nil)]
+      (string-to-long prop-name string-value config-valid)
+      default)))
 
 (defn get-required-boolean-prop
   "Gets a required Boolean property from a set of properties.  If a property is missing or not able
@@ -317,11 +314,11 @@
        config-valid - a ref containing the vailidity flag.
        default      - the default value."
   ([props prop-name config-valid]
-     (get-optional-boolean-prop props prop-name config-valid false))
+    (get-optional-boolean-prop props prop-name config-valid false))
   ([props prop-name config-valid default]
-     (if-let [string-value (get-optional-prop props prop-name config-valid nil)]
-       (string-to-boolean prop-name string-value config-valid)
-       default)))
+    (if-let [string-value (get-optional-prop props prop-name config-valid nil)]
+      (string-to-boolean prop-name string-value config-valid)
+      default)))
 
 (defn get-required-uuid-prop
   "Gets a required UUID property from a set of properties. If a property is missing or not able
@@ -347,11 +344,11 @@
        config-valid - a ref containing the vailidity flag.
        default      - the default value."
   ([props prop-name config-valid]
-     (get-optional-uuid-prop props prop-name config-valid nil))
+    (get-optional-uuid-prop props prop-name config-valid nil))
   ([props prop-name config-valid default]
-     (if-let [string-value (get-optional-prop props prop-name config-valid nil)]
-       (string-to-uuid prop-name string-value config-valid)
-       default)))
+    (if-let [string-value (get-optional-prop props prop-name config-valid nil)]
+      (string-to-uuid prop-name string-value config-valid)
+      default)))
 
 (defn- wrap-extraction-fn
   "Places a property extraction function in an appropriate wrapper, depending on whether or not
@@ -445,11 +442,11 @@
        prop-name    - the name of the property.
        default      - the default value."
   ([sym desc [props config-valid configs & flag-props] prop-name]
-     (define-optional-property
-       sym desc [props config-valid configs flag-props] prop-name get-optional-prop ""))
+    (define-optional-property
+      sym desc [props config-valid configs flag-props] prop-name get-optional-prop ""))
   ([sym desc [props config-valid configs & flag-props] prop-name default]
-     (define-optional-property
-       sym desc [props config-valid configs flag-props] prop-name get-optional-prop default)))
+    (define-optional-property
+      sym desc [props config-valid configs flag-props] prop-name get-optional-prop default)))
 
 (defmacro defprop-vec
   "Defines a required vector property.
@@ -479,13 +476,13 @@
        prop-name    - the name of the property.
        default      - the default value."
   ([sym desc [props config-valid configs & flag-props] prop-name]
-     (define-optional-property
-       sym desc [props config-valid configs flag-props]
-       prop-name get-optional-vector-prop []))
+    (define-optional-property
+      sym desc [props config-valid configs flag-props]
+      prop-name get-optional-vector-prop []))
   ([sym desc [props config-valid configs & flag-props] prop-name default]
-     (define-optional-property
-       sym desc [props config-valid configs flag-props]
-       prop-name get-optional-vector-prop default)))
+    (define-optional-property
+      sym desc [props config-valid configs flag-props]
+      prop-name get-optional-vector-prop default)))
 
 (defmacro defprop-int
   "Defines a required integer property.
@@ -514,13 +511,13 @@
        prop-name    - the name of the property.
        default      - the default value."
   ([sym desc [props config-valid configs & flag-props] prop-name]
-     (define-optional-property
-       sym desc [props config-valid configs flag-props]
-       prop-name get-optional-integer-prop 0))
+    (define-optional-property
+      sym desc [props config-valid configs flag-props]
+      prop-name get-optional-integer-prop 0))
   ([sym desc [props config-valid configs & flag-props] prop-name default]
-     (define-optional-property
-       sym desc [props config-valid configs flag-props]
-       prop-name get-optional-integer-prop default)))
+    (define-optional-property
+      sym desc [props config-valid configs flag-props]
+      prop-name get-optional-integer-prop default)))
 
 (defmacro defprop-long
   "Defines a required long property.
@@ -549,11 +546,11 @@
        flag-props   - the feature flag properties determining if the property is relevant.
        default      - the default value."
   ([sym desc [props config-valid configs & flag-props] prop-name]
-     (define-optional-property
-       sym desc [props config-valid configs flag-props] prop-name get-optional-long-prop 0))
+    (define-optional-property
+      sym desc [props config-valid configs flag-props] prop-name get-optional-long-prop 0))
   ([sym desc [props config-valid configs & flag-props] prop-name default]
-     (define-optional-property
-       sym desc [props config-valid configs flag-props] prop-name get-optional-long-prop default)))
+    (define-optional-property
+      sym desc [props config-valid configs flag-props] prop-name get-optional-long-prop default)))
 
 (defmacro defprop-boolean
   "Defines a required Boolean property.
@@ -583,13 +580,13 @@
        prop-name    - the name of the property.
        default      - the default value."
   ([sym desc [props config-valid configs & flag-props] prop-name]
-     (define-optional-property
-       sym desc [props config-valid configs flag-props]
-       prop-name get-optional-boolean-prop false))
+    (define-optional-property
+      sym desc [props config-valid configs flag-props]
+      prop-name get-optional-boolean-prop false))
   ([sym desc [props config-valid configs & flag-props] prop-name default]
-     (define-optional-property
-       sym desc [props config-valid configs flag-props]
-       prop-name get-optional-boolean-prop default)))
+    (define-optional-property
+      sym desc [props config-valid configs flag-props]
+      prop-name get-optional-boolean-prop default)))
 
 (defmacro defprop-uuid
   "Defines a required UUID property
@@ -619,13 +616,13 @@
        prop-name    - the name of the property.
        default      - the default value."
   ([sym desc [props config-valid configs & flag-props] prop-name]
-     (define-optional-property
-       sym desc [props config-valid configs flag-props]
-       prop-name get-optional-uuid-prop false))
+    (define-optional-property
+      sym desc [props config-valid configs flag-props]
+      prop-name get-optional-uuid-prop false))
   ([sym desc [props config-valid configs & flag-props] prop-name default]
-     (define-optional-property
-       sym desc [props config-valid configs flag-props]
-       prop-name get-optional-uuid-prop default)))
+    (define-optional-property
+      sym desc [props config-valid configs flag-props]
+      prop-name get-optional-uuid-prop default)))
 
 (defn validate-config
   "Validates a configuration that has been defined and loaded using this library.

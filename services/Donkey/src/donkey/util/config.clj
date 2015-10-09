@@ -546,7 +546,7 @@
   "Loads the configuration settings from a file."
   [cfg-path]
   (cc/load-config-from-file cfg-path props)
-  (cc/update-config-from-env cfg-path props)
+  (cc/update-config-from-env props)
   (cc/log-config props :filters [#"irods\.user" #"icat\.user" #"oauth\.pem"])
   (log-environment)
   (validate-config)
