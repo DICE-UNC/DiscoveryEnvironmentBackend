@@ -9,5 +9,5 @@ RUN apt-get update && apt-get install -y openjdk-7-jre-headless postgresql-clien
 
 COPY target/facepalm-standalone.jar /
 
-ENTRYPOINT ["java", "-jar", "facepalm-standalone.jar"]
-CMD [ "--help" ]
+#ENTRYPOINT ["java", "-jar", "facepalm-standalone.jar"]
+CMD [ "top" ]
