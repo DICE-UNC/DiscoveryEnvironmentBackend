@@ -20,5 +20,3 @@ chmod 0600 ~/.pgpass
 
 psql -h $PGHOST -p $PGPORT -U $PGADMIN -c "CREATE ROLE de WITH PASSWORD 'notprod' LOGIN;"
 psql -h $PGHOST -p $PGPORT -U $PGADMIN -c "CREATE DATABASE de WITH OWNER de;"
-
-java -jar /facepalm-standalone.jar -m init -A $PGADMIN -U de -d de -h $PGHOST -p $PGPORT -f /database.tar.gz
