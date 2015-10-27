@@ -45,13 +45,13 @@
      (path-for-uuid cm user uuid))))
 
 (defn ^IPersistentMap uuid-exists?
-  "Checks if an entry exists with a given UUID.
+  "Checks if a data item exists with a given UUID.
 
    Params:
      uuid - the UUID
 
    Returns:
-     True if any entries were found with the given UUID, false otherwise."
+     True if any data items were found with the given UUID, false otherwise."
   ([^IPersistentMap cm ^UUID uuid]
     (let [results (list-everything-with-attr-value cm uuid-attr uuid)]
       (pos? (count results))))
@@ -60,25 +60,15 @@
       (uuid-exists? cm uuid))))
 
 
-(defn paths-for-uuids
-  [user uuids]
-  (letfn [(id-type [type entity] (merge entity {:id (:path entity) :type type}))]
-    (init/with-jargon (jargon/jargon-cfg) [cm]
-      (user-exists cm user)
-      (->> (concat (map (partial id-type :dir) (icat/select-folders-with-uuids uuids))
-                   (map (partial id-type :file) (icat/select-files-with-uuids uuids)))
-        (mapv (partial stat/decorate-stat cm user))
-        (remove #(nil? (:permission %)))))))
-
 (defn- fmt-stat
-  [cm user entry]
-  (let [path (:full_path entry)]
-    (->> {:date-created  (* 1000 (Long/valueOf (:create_ts entry)))
-          :date-modified (* 1000 (Long/valueOf (:modify_ts entry)))
-          :file-size     (:data_size entry)
-          :id            (:uuid entry)
+  [cm user data-item]
+  (let [path (:full_path data-item)]
+    (->> {:date-created  (* 1000 (Long/valueOf (:create_ts data-item)))
+          :date-modified (* 1000 (Long/valueOf (:modify_ts data-item)))
+          :file-size     (:data_size data-item)
+          :id            (:uuid data-item)
           :path          path
-          :type          (case (:type entry)
+          :type          (case (:type data-item)
                            "collection" :dir
                            "dataobject" :file)}
       (stat/decorate-stat cm user))))
@@ -113,12 +103,6 @@
            (icat/paged-uuid-listing user zone sort-col sort-order limit offset uuids info-types)))))
 
 
-(defn do-paths-for-uuids
-  [params body]
-  (validate-map params {:user string?})
-  (validate-map body {:uuids sequential?})
-  (json/encode {:paths (paths-for-uuids (:user params) (:uuids body))}))
-
 (defn uuid-for-path
   [cm user path]
   (let [attrs (get-attribute cm path uuid-attr)]
@@ -129,32 +113,17 @@
       (merge {:uuid (:value (first attrs))}
              (stat/path-stat cm user path)))))
 
-(defn uuids-for-paths
-  [user paths]
-  (init/with-jargon (jargon/jargon-cfg) [cm]
-    (user-exists cm user)
-    (all-paths-exist cm paths)
-    (all-paths-readable cm user paths)
-    (filter #(not (nil? %)) (mapv (partial uuid-for-path cm user) paths))))
-
-(defn do-uuids-for-paths
-  [params body]
-  (log/warn body)
-  (validate-map params {:user string?})
-  (validate-map body {:paths sequential?})
-  (json/encode {:paths (uuids-for-paths (:user params) (:paths body))}))
-
 
 (defn ^Boolean uuid-accessible?
-  "Indicates if a filesystem entry is readble by a given user.
+  "Indicates if a data item is readable by a given user.
 
    Parameters:
      user     - the authenticated name of the user
-     entry-id - the UUID of the filesystem entry
+     data-id  - the UUID of the data item
 
    Returns:
-     It returns true if the user can access the entry, otherwise false"
-  [^String user ^UUID entry-id]
+     It returns true if the user can access the data item, otherwise false"
+  [^String user ^UUID data-id]
   (init/with-jargon (jargon/jargon-cfg) [cm]
-    (let [entry-path (:path (path-for-uuid cm user (str entry-id)))]
-      (and entry-path (is-readable? cm user entry-path)))))
+    (let [data-path (:path (path-for-uuid cm user (str data-id)))]
+      (and data-path (is-readable? cm user data-path)))))

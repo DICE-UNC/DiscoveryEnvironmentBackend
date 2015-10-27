@@ -5,11 +5,13 @@
                                   container-settings
                                   container-devices
                                   container-volumes
-                                  container-volumes-from]]
+                                  container-volumes-from
+                                  data-containers]]
         [kameleon.uuids :only [uuidify]]
         [korma.core]
         [korma.db :only [transaction]]
         [metadactyl.persistence.app-metadata :only [update-tool]]
+        [metadactyl.util.assertions :only [assert-not-nil]]
         [metadactyl.util.conversions :only [remove-nil-vals remove-empty-vals]])
   (:require [clojure.tools.logging :as log]))
 
@@ -31,6 +33,13 @@
   (first (select container-images
                  (fields :name :tag :url :id)
                  (where {:id (uuidify image-uuid)}))))
+
+(defn list-images
+  "Returns a list of all defined images."
+  []
+  {:container_images
+    (select container-images
+      (fields :name :tag :url :id))})
 
 (defn tool-image-info
   "Returns a map containing information about a container image. Info is looked up by the tool UUID"
@@ -77,19 +86,32 @@
                        :tag tag
                        :url url})))))
 
+(defn- find-or-add-image-id
+  [image]
+  (or (image-id image)
+      (:id (add-image-info image))))
+
 (defn modify-image-info
   "Updates the record for a container image. Basically, just allows you to set a new URL
    at this point."
-  [image-map]
-  (let [tag  (get-tag image-map)
-        name (:name image-map)
-        url  (:url image-map)]
-    (if-not (image? image-map)
-      (throw (Exception. (str "image doesn't exist: " image-map)))
+  [image-id update-map]
+  (let [umap (select-keys update-map [:name :tag :url])]
+    (when-not (empty? umap)
       (update container-images
-              (set-fields {:url url})
-              (where (and (= :name name)
-                          (= :tag tag)))))))
+        (set-fields umap)
+        (where (= :id (uuidify image-id))))
+      (select container-images
+        (where (= :id (uuidify image-id)))))))
+
+(defn delete-image
+  [image-id]
+  (when (image-id image-id)
+    (transaction
+      (update tools
+        (set-fields {:container_images_id nil})
+        (where {:container_images_id (uuidify image-id)}))
+      (delete container-images
+        (where (= :id (uuidify image-id)))))))
 
 (defn delete-image-info
   "Deletes a record for an image"
@@ -233,6 +255,54 @@
   (when (volume? volume-uuid)
     (delete container-volumes (where {:id (uuidify volume-uuid)}))))
 
+(defn data-container
+  "Returns a map describing a data container."
+  [data-container-id]
+  (assert-not-nil [:data-container-id data-container-id]
+    (first
+      (select data-containers
+              (fields :id :name_prefix :read_only)
+              (with container-images (fields :name :tag :url))
+              (where {:id data-container-id})))))
+
+(defn list-data-containers
+  "Returns a list of all data containers."
+  []
+  {:data_containers (select data-containers
+                      (fields :id :name_prefix :read_only)
+                      (with container-images (fields :name :tag :url)))})
+
+(defn- add-data-container
+  [data-container-info]
+  (let [image-uuid (find-or-add-image-id data-container-info)
+        insert-values (assoc (select-keys data-container-info [:name_prefix :read_only])
+                             :container_images_id image-uuid)]
+    (insert data-containers (values insert-values))))
+
+(defn modify-data-container
+  "Modifies a data container based on the update map."
+  [data-container-id {:keys [name url] :as data-container-info}]
+  (when (data-container data-container-id)
+    (transaction
+      (let [container-images-id (when name (find-or-add-image-id data-container-info))
+            umap (-> data-container-info
+                     (select-keys [:name_prefix :read_only])
+                     (assoc :container_images_id container-images-id)
+                     remove-nil-vals)]
+        (when-not (empty? umap)
+          (update data-containers
+                  (set-fields umap)
+                  (where {:id data-container-id})))
+        (data-container data-container-id)))))
+
+(defn- find-data-container-id
+  "Returns the UUID used as the primary key in the data_containers table."
+  [data-container-info]
+  (:id (first
+         (select data-containers
+           (where (assoc (select-keys data-container-info [:name_prefix :read_only])
+                         :container_images_id (image-id data-container-info)))))))
+
 (defn volumes-from
   "Returns all records from container_volumes_from associated with the UUID passed in. There
    should only be a single result, but we're returning a seq just in case."
@@ -246,19 +316,22 @@
   (pos? (count (select container-volumes-from
                        (where {:id (uuidify volumes-from-uuid)})))))
 
-(defn volumes-from-mapping?
+(defn- volumes-from-mapping?
   "Returns true if the combination of the container_settings UUID and container
    already exists in the container_volumes_from table."
-  [settings-uuid volumes-from-name]
+  [settings-uuid data-container-uuid]
   (pos? (count (select container-volumes-from
                        (where {:container_settings_id (uuidify settings-uuid)
-                               :name volumes-from-name})))))
+                               :data_containers_id     (uuidify data-container-uuid)})))))
 
-(defn volumes-from-mapping
-  [settings-uuid volumes-from-name]
+(defn- volumes-from-settings
+  [settings-uuid data-container-uuid]
   (first (select container-volumes-from
+                 (fields :id)
+                 (with data-containers (fields :name_prefix :read_only)
+                   (with container-images (fields :name :tag :url)))
                  (where {:container_settings_id (uuidify settings-uuid)
-                         :name                  volumes-from-name}))))
+                         :data_containers_id     (uuidify data-container-uuid)}))))
 
 (defn settings-has-volumes-from?
   "Returns true if the indicated container_settings record has at least one
@@ -268,22 +341,13 @@
                        (where {:container_settings_id (uuidify settings-uuid)
                                :id                    (uuidify volumes-from-uuid)})))))
 
-(defn add-volumes-from
+(defn- add-volumes-from
   "Adds a record to container_volumes_from associated with the given
    container_settings UUID."
-  [settings-uuid volumes-from-name]
+  [settings-uuid data-container-uuid]
   (insert container-volumes-from
           (values {:container_settings_id (uuidify settings-uuid)
-                   :name volumes-from-name})))
-
-(defn modify-volumes-from
-  "Modifies a record in container_volumes_from."
-  [settings-uuid volumes-from-uuid vf-map]
-  (if-not (volumes-from? volumes-from-uuid)
-    (throw (Exception. (str "volume from setting does not exist: " volumes-from-uuid))))
-  (update container-volumes-from
-          (set-fields (select-keys vf-map [:name]))
-          (where {:id (uuidify volumes-from-uuid)})))
+                   :data_containers_id     (uuidify data-container-uuid)})))
 
 (defn delete-volumes-from
   "Deletes a record from container_volumes_from."
@@ -351,18 +415,25 @@
   (-> retval remove-nil-vals remove-empty-vals))
 
 (defn tool-container-info
-  "Returns container info associated with a tool or nil"
+  "Returns container info associated with a tool or nil. This is used to build
+  the JSON map that is passed down to the JEX. If you make changes to the
+  container-related parts of the DE database schema, you'll likely need to make
+  changes here."
   [tool-uuid]
   (let [id (uuidify tool-uuid)]
     (when (tool-has-settings? id)
       (->  (select container-settings
                    (fields :id :cpu_shares :memory_limit :network_mode :name :working_directory :entrypoint)
                    (with container-devices
-                         (fields :host_path :container_path :id))
+                     (fields :host_path :container_path :id))
                    (with container-volumes
-                         (fields :host_path :container_path :id))
+                     (fields :host_path :container_path :id))
                    (with container-volumes-from
-                         (fields :name :id))
+                     (fields :id)
+                     (with data-containers
+                       (fields :name_prefix :read_only)
+                       (with container-images
+                         (fields :name :tag :url))))
                    (where {:tools_id id}))
            first
            (merge {:image (tool-image-info tool-uuid)})
@@ -460,32 +531,22 @@
   (when (tool-has-settings? tool-uuid)
     (let [settings-uuid (tool-settings-uuid tool-uuid)]
       (when (settings-has-volumes-from? settings-uuid volumes-from-uuid)
-        (dissoc (volumes-from volumes-from-uuid) :container_settings_id)))))
+        (volumes-from-settings settings-uuid (:data_containers_id (volumes-from volumes-from-uuid)))))))
 
-(defn update-volumes-from-field
-  [tool-uuid vf-uuid field-kw new-value]
-  (let [id (uuidify tool-uuid)]
-    (when (tool-has-settings? id)
-      (let [settings-id (tool-settings-uuid id)]
-        (when (and (volumes-from? vf-uuid)
-                   (settings-has-volumes-from? settings-id vf-uuid))
-          (select-keys (modify-volumes-from settings-id vf-uuid {field-kw new-value}) [field-kw]))))))
+(defn- add-settings-volumes-from
+  [settings-id vf-map]
+  (transaction
+    (let [data-container-id (or (find-data-container-id vf-map)
+                                (:id (add-data-container vf-map)))]
+      (when-not (volumes-from-mapping? settings-id data-container-id)
+        (add-volumes-from settings-id data-container-id))
+      (volumes-from-settings settings-id data-container-id))))
 
 (defn add-tool-volumes-from
   [tool-uuid vf-map]
   (when-not (tool-has-settings? tool-uuid)
     (throw (Exception. (str "Tool " tool-uuid " does not have a container."))))
-  (let [settings-uuid (tool-settings-uuid tool-uuid)]
-    (dissoc
-     (if-not (volumes-from-mapping? settings-uuid (:name vf-map))
-       (add-volumes-from settings-uuid (:name vf-map))
-       (volumes-from-mapping settings-uuid (:name vf-map)))
-     :container_settings_id)))
-
-(defn volumes-from-field
-  [tool-uuid vf-uuid field-kw]
-  (let [fields (tool-volumes-from tool-uuid vf-uuid)]
-    (or (select-keys fields [field-kw]) nil)))
+  (add-settings-volumes-from (tool-settings-uuid tool-uuid) vf-map))
 
 (defn tool-volume-info
   "Returns a container's volumes info based on the tool UUID."
@@ -507,13 +568,12 @@
     (throw (Exception. (str "Tool " tool-uuid " already has container settings."))))
   (let [devices  (:container_devices info-map)
         volumes  (:container_volumes info-map)
-        vfs      (map :name (:container_volumes_from info-map))
+        vfs      (:container_volumes_from info-map)
         settings (dissoc info-map :container_devices :container_volumes :container_volumes_from)
         info-map (assoc info-map :tools_id (uuidify tool-uuid))]
     (log/warn "adding container information for tool" tool-uuid ":" info-map)
     (transaction
-     (let [img-id        (or (image-id (:image info-map))
-                             (:id (add-image-info (:image info-map))))
+     (let [img-id        (find-or-add-image-id (:image info-map))
            settings-map  (add-settings info-map)
            settings-uuid (:id settings-map)]
        (update-tool {:id tool-uuid :container_images_id img-id})
@@ -522,7 +582,7 @@
        (doseq [v volumes]
          (add-volume settings-uuid v))
        (doseq [vf vfs]
-         (add-volumes-from settings-uuid vf))
+         (add-settings-volumes-from settings-uuid vf))
        (tool-container-info tool-uuid)))))
 
 (defn delete-tool-device

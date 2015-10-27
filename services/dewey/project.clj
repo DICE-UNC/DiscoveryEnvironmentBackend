@@ -32,8 +32,7 @@
                  [ring/ring-jetty-adapter "1.3.0"]
                  [slingshot "0.10.3"]
                  [org.iplantc/clj-jargon "5.0.0"
-                   :exclusions [[org.slf4j/slf4j-api]
-                                [org.slf4j/slf4j-log4j12]
+                   :exclusions [[org.slf4j/slf4j-log4j12]
                                 [log4j]]]
                  [org.iplantc/clojure-commons "5.0.0"]
                  [org.iplantc/common-cli "5.0.0"]
@@ -43,7 +42,6 @@
   :profiles {:dev     {:dependencies   [[midje "1.6.3"]]
                        :resource-paths ["dev-resource"]}
              :uberjar {:aot :all}}
-  :plugins [[org.iplantc/lein-iplant-rpm "5.0.0"]]
   :repositories [["sonatype-nexus-snapshots"
                   {:url "https://oss.sonatype.org/content/repositories/snapshots"}]]
   :deploy-repositories [["sonatype-nexus-staging"

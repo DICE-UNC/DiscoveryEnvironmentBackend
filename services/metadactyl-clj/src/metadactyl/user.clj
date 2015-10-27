@@ -4,7 +4,7 @@
   (:require [clojure.string :as string]
             [clojure.tools.logging :as log]
             [clojure-commons.error-codes :as common-errors]
-            [metadactyl.clients.trellis :as trellis]
+            [metadactyl.clients.iplant-groups :as ipg]
             [metadactyl.util.service :as service]))
 
 (def
@@ -38,14 +38,20 @@
   (fn [{uri :uri :as request}]
     (common-errors/trap uri #(with-user [(:params request)] (handler request)))))
 
-(defn load-user
-  "Loads information for the user with the given username."
-  [username]
+(defn load-user-as-user
+  "Loads information for the user with the given username, as another username."
+  [username act-as-username]
   (let [short-username (string/replace username #"@.*" "")
-        user-info      (trellis/get-user-details short-username)]
+        short-act-as-username (string/replace act-as-username #"@.*" "")
+        user-info      (ipg/lookup-subject short-act-as-username short-username)]
     {:username      username
      :password      nil
      :email         (:email user-info)
      :shortUsername short-username
-     :first-name    (:firstname user-info)
-     :last-name     (:lastname user-info)}))
+     :first-name    (:first-name user-info)
+     :last-name     (:last-name user-info)}))
+
+(defn load-user
+  "Loads information for the user with the given username."
+  [username]
+  (load-user-as-user username (:shortUsername current-user)))

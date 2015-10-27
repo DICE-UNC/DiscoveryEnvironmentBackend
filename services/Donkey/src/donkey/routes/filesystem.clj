@@ -20,11 +20,8 @@
             [donkey.services.filesystem.move :as move]
             [donkey.services.filesystem.page-csv :as csv]
             [donkey.services.filesystem.page-file :as file]
-            [donkey.services.filesystem.preview :as preview]
-            [donkey.services.filesystem.rename :as rename]
             [donkey.services.filesystem.root :as root]
             [donkey.services.filesystem.sharing :as sharing]
-            [donkey.services.filesystem.space-handling :as sh]
             [donkey.services.filesystem.stat :as stat]
             [donkey.services.filesystem.tickets :as ticket]
             [donkey.services.filesystem.trash :as trash]
@@ -51,17 +48,8 @@
     (POST "/filesystem/stat" [:as req]
       (controller req stat/do-stat :params :body))
 
-    (POST "/filesystem/download" [:as req]
-      (controller req ud/do-download :params :body))
-
-    (POST "/filesystem/download-contents" [:as req]
-      (controller req ud/do-download-contents :params :body))
-
     (GET "/filesystem/display-download" [:as req]
       (controller req ud/do-special-download :params))
-
-    (GET "/filesystem/upload" [:as req]
-      (controller req ud/do-upload :params))
 
     (GET "/filesystem/directory" [:as req]
       (controller req dir/do-directory :params))
@@ -76,7 +64,7 @@
       (controller req data/create-dir :params :body))
 
     (POST "/filesystem/rename" [:as req]
-      (controller req rename/do-rename :params :body))
+      (controller req data/rename :params :body))
 
     (POST "/filesystem/delete" [:as req]
       (controller req trash/do-delete :params :body))
@@ -88,10 +76,7 @@
       (controller req move/do-move :params :body))
 
     (POST "/filesystem/move-contents" [:as req]
-      (controller req move/do-move-contents :params :body))
-
-    (GET "/filesystem/file/preview" [:as req]
-      (controller req preview/do-preview :params))
+      (controller req data/move-contents :params :body))
 
     (GET "/filesystem/file/manifest" [:as req]
       (controller req manifest/do-manifest :params))
@@ -129,12 +114,6 @@
     (POST "/filesystem/user-permissions" [:as req]
       (controller req user/do-user-permissions :params :body))
 
-    (GET "/filesystem/groups" [:as req]
-      (controller req user/do-groups :params))
-
-    (GET "/filesystem/quota" [:as req]
-      (controller req user/do-quota :params))
-
     (POST "/filesystem/restore" [:as req]
       (controller req trash/do-restore :params :body))
 
@@ -150,35 +129,17 @@
     (POST "/filesystem/list-tickets" [:as req]
       (controller req ticket/do-list-tickets :params :body))
 
-    (GET "/filesystem/user-trash-dir" [:as req]
-      (controller req trash/do-user-trash :params))
-
-    (POST "/filesystem/paths-contain-space" [:as req]
-      (controller req sh/do-paths-contain-space :params :body))
-
-    (POST "/filesystem/replace-spaces" [:as req]
-      (controller req sh/do-replace-spaces :params :body))
-
     (DELETE "/filesystem/trash" [:as req]
       (controller req trash/do-delete-trash :params))
 
     (POST "/filesystem/read-chunk" [:as req]
       (controller req file/do-read-chunk :params :body))
 
-    (POST "/filesystem/overwrite-chunk" [:as req]
-      (controller req file/do-overwrite-chunk :params :body))
-
     (POST "/filesystem/read-csv-chunk" [:as req]
       (controller req csv/do-read-csv-chunk :params :body))
 
     (POST "/filesystem/anon-files" [:as req]
-      (controller req sharing/do-anon-files :params :body))
-
-    (POST "/filesystem/paths-for-uuids" [:as req]
-      (controller req uuid/do-paths-for-uuids :params :body))
-
-    (POST "/filesystem/uuids-for-paths" [:as req]
-      (controller req uuid/do-uuids-for-paths :params :body))))
+      (controller req sharing/do-anon-files :params :body))))
 
 (defn secured-filesystem-metadata-routes
   "The routes for file metadata endpoints."

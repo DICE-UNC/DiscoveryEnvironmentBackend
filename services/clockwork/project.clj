@@ -28,8 +28,7 @@
                  [com.cemerick/url "0.0.7"]
                  [korma "0.3.0-RC5"]
                  [org.iplantc/clj-jargon "5.0.0"
-                   :exclusions [[org.slf4j/slf4j-api]
-                                [org.slf4j/slf4j-log4j12]
+                   :exclusions [[org.slf4j/slf4j-log4j12]
                                 [log4j]]]
                  [org.iplantc/clojure-commons "5.0.0"]
                  [org.iplantc/common-cli "5.0.0"]
@@ -37,7 +36,6 @@
                  [org.iplantc/service-logging "5.0.0"]
                  [me.raynes/fs "1.4.6"]
                  [slingshot "0.10.3"]]
-  :plugins [[org.iplantc/lein-iplant-rpm "5.0.0"]]
   :profiles {:dev     {:resource-paths ["resources/test"]}
              :uberjar {:aot :all}}
   :main ^:skip-aot clockwork.core

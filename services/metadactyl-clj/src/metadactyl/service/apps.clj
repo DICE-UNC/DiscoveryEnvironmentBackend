@@ -81,7 +81,7 @@
   ([username]
      (get-apps-client-for-username username ""))
   ([username state-info]
-     (get-apps-client (user/load-user username) state-info)))
+     (get-apps-client (user/load-user-as-user username username) state-info)))
 
 (defn get-app-categories
   [user params]
@@ -281,6 +281,10 @@
   [user job-id]
   (jobs/stop-job (get-apps-client user) user job-id)
   {:id job-id})
+
+(defn list-job-steps
+  [user job-id]
+  (jobs/list-job-steps user job-id))
 
 (defn categorize-apps
   [user body]

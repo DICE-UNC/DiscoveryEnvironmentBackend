@@ -106,7 +106,8 @@
         :name             app-label
         :description      (:shortDescription app)
         :integration_date mod-time
-        :edited_date      mod-time}))
+        :edited_date      mod-time
+        :app_type         c/hpc-app-type}))
   ([agave app]
      (format-app agave app format-groups)))
 
@@ -122,8 +123,8 @@
   {:attribution ""
    :description (:shortDescription app)
    :id          (:id app)
-   :location    (string/replace path #"/[^/]+$" "")
-   :name        (string/replace path #"^.*/" "")
+   :location    path
+   :name        (:id app)
    :type        (:executionType app)
    :version     (:version app)})
 

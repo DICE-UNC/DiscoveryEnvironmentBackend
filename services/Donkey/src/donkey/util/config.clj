@@ -1,8 +1,6 @@
 (ns donkey.util.config
   (:use [slingshot.slingshot :only [throw+]])
-  (:require [cemerick.url :as curl]
-            [cheshire.core :as cheshire]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [clojure-commons.config :as cc]
             [clojure-commons.error-codes :as ce]
             [common-cfg.cfg :as cfg]
@@ -198,20 +196,10 @@
        (cfg/env-setting "NOTIFICATIONAGENT_PORT")
        (notificationagent-base-url)))))
 
-(cc/defprop-str userinfo-base-url
-  "The base URL for the user info API."
-  [props config-valid configs user-info-routes-enabled]
-  "donkey.userinfo.base-url")
-
-(cc/defprop-str userinfo-key
-  "The key to use when authenticating to the user info API."
-  [props config-valid configs user-info-routes-enabled]
-  "donkey.userinfo.client-key")
-
-(cc/defprop-str userinfo-secret
-  "The secret to use when authenticating to the user info API."
-  [props config-valid configs user-info-routes-enabled]
-  "donkey.userinfo.password")
+(cc/defprop-str ipg-base
+  "The base URL for the iplant-groups service."
+  [props config-valid configs]
+  "donkey.iplant-groups.base-url")
 
 (cc/defprop-str jex-base-url
   "The base URL for the JEX."
@@ -317,11 +305,6 @@
 ;;; End of Garnish configuration
 
 ;;; File IO configuration
-(cc/defprop-str fileio-temp-dir
-  "The directory, in iRODS, to use as temp storage for uploads."
-  [props config-valid configs fileio-routes-enabled]
-  "donkey.fileio.temp-dir")
-
 (cc/defprop-uuid fileio-url-import-app
   "The identifier of the internal app used for URL imports."
   [props config-valid configs fileio-routes-enabled]
@@ -392,14 +375,6 @@
        (cfg/env-setting "ANON_FILES_PORT")
        (anon-files-base-url)))))
 ;;; End Filesystem configuration
-
-(cc/defprop-int default-user-search-result-limit
-  "The default limit for the number of results for a user info search.  Note
-   this is the maximum number of results returned by trellis for any given
-   search.  Our aggregate search may return the limit times the number of
-   search types."
-  [props config-valid configs user-info-routes-enabled]
-  "donkey.userinfo.default-search-limit")
 
 (cc/defprop-optint default-search-result-limit
   "This is the default limit for the number of results for a data search."

@@ -18,9 +18,11 @@
   :uberjar-name "kifshare-standalone.jar"
 
   :dependencies [[org.clojure/clojure "1.6.0"]
+                 [org.clojure/tools.logging "0.3.1"]
+                 [medley "0.5.5"]
+                 [ring/ring-core "1.3.2"]
                  [org.iplantc/clj-jargon "5.0.0"
-                   :exclusions [[org.slf4j/slf4j-api]
-                                [org.slf4j/slf4j-log4j12]
+                   :exclusions [[org.slf4j/slf4j-log4j12]
                                 [log4j]]]
                  [org.iplantc/service-logging "5.0.0"]
                  [org.iplantc/clojure-commons "5.0.0"]
@@ -47,14 +49,7 @@
                        :plugins [[lein-midje "2.0.1"]]}
              :uberjar {:aot :all}}
 
-  :iplant-rpm {:summary "kifshare",
-               :dependencies ["iplant-service-config >= 0.1.0-5"
-                              "java-1.7.0-openjdk"],
-               :config-files ["log4j2.xml"],
-               :config-path "conf"}
-
-  :plugins [[lein-ring "0.7.5"]
-            [org.iplantc/lein-iplant-rpm "5.0.0"]]
+  :plugins [[lein-ring "0.7.5"]]
 
   :repositories [["sonatype-nexus-snapshots"
                   {:url "https://oss.sonatype.org/content/repositories/snapshots"}]

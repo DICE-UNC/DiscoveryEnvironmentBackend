@@ -1,4 +1,5 @@
 (ns jex.incoming-xforms
+  (:use [jex.common])
   (:require [clojure.string :as string]
             [clojure.tools.logging :as log]
             [clojure-commons.file-utils :as ut]
@@ -37,11 +38,6 @@
   "Returns the current date as a java.util.Date instance."
   []
   (java.util.Date.))
-
-(defn filetool-env
-  "Creates the filetool environment variables."
-  []
-  (str "PATH=" (cfg/icommands-path)))
 
 (defn analysis-dirname
   "Creates a directory name for an analysis. Used when the submission
@@ -190,15 +186,6 @@
         #(vector (:name %1) (quote-value (:value %1)))
         (sort-by :order params)))))
 
-(defn format-env-variables
-  "Formats and escapes environment variables that are passed to it."
-  [env-map]
-  (string/join
-    " "
-    (mapv
-      #(str (name (first %1)) "=" (str "\"" (last %1) "\""))
-      (seq env-map))))
-
 (defn containerized?
   "Returns true if the step should run in a container."
   [step-map]
@@ -208,6 +195,15 @@
   "Returns a map of the container information extracted from the step map."
   [step-map]
   (get-in step-map [:component :container]))
+
+(defn data-containers
+  "Returns a list of the data containers associated with the job."
+  [condor-map]
+  (assoc condor-map :data-containers
+         (distinct (flatten (mapv (fn [step]
+                   (mapv #(select-keys %1 [:tag :name :name_prefix :host_path :container_path :read_only])
+                         (get-in step [:component :container :container_volumes_from])))
+                 (:steps condor-map))))))
 
 (defn container-volumes?
   "Returns true if the container has volumes defined."
@@ -254,11 +250,11 @@
                       (:container_devices container-map)))))
 
 (defn container-volumes-from-args
-  [container-map]
+  [uuid container-map]
   (if (container-volumes-from? container-map)
     (string/join " " (map
                       (fn [vf]
-                        (str "--volumes-from=" (:name vf)))
+                        (str "--volumes-from=" (volumes-from-name uuid (:name_prefix vf))))
                       (:container_volumes_from container-map)))))
 
 (defn container-name-arg
@@ -338,7 +334,7 @@
     (str "-v /usr/local2/:/usr/local2 -v /usr/local3/:/usr/local3/ -v /data2/:/data2/")))
 
 (defn container-args
-  [step-map]
+  [uuid step-map]
   (let [container-map (container-info step-map)]
     (string/join
      " "
@@ -348,7 +344,7 @@
        (backwards-compatible-args step-map)
        (container-volume-args container-map)
        (container-device-args container-map)
-       (container-volumes-from-args container-map)
+       (container-volumes-from-args uuid container-map)
        (container-name-arg container-map)
        (container-working-directory-arg container-map)
        (container-name-arg container-map)
@@ -371,20 +367,14 @@
    path to the executable since they're the same across all of the Condor
    nodes."
   [step-map]
-  (if (containerized? step-map)
-    "docker"
-    (ut/path-join
-     (get-in step-map [:component :location])
-     (get-in step-map [:component :name]))))
+  "docker")
 
 (defn arguments
   "Takes in a step map map and returns the formatted arguments
    for that step in the analysis."
-  [step-map]
+  [uuid step-map]
   (let [cmd (-> (get-in step-map [:config :params]) param-maps escape-params)]
-    (if (containerized? step-map)
-      (str (container-args step-map) " " cmd)
-      cmd)))
+    (str (container-args uuid step-map) " " cmd)))
 
 (defn stdin
   "Returns the path to the stdin file or nil if there isn't one. This should
@@ -412,16 +402,6 @@
   (if (contains? step-map :stderr)
     (quote-value (:stderr step-map))
     (str "logs/" "condor-stderr-" index)))
-
-(defn environment
-  "Returns the environment variables as a bash-compatible string. Used to set
-   the environment variables for each individual step in the analysis. Should
-   prevent any of the environment variables from leaking over to another step
-   in the analysis. "
-  [step-map]
-  (if (contains? step-map :environment)
-    (if-not (containerized? step-map)
-      (format-env-variables (:environment step-map)))))
 
 (defn log-file
   "Returns the path to the condor log files."
@@ -451,9 +431,8 @@
       :type            "condor"
       :submission_date (:submission_date condor-map)
       :status          "Submitted"
-      :environment     (environment step)
       :executable      (executable step)
-      :arguments       (arguments step)
+      :arguments       (arguments (:uuid condor-map) step)
       :stdout          (stdout step step-idx)
       :stderr          (stderr step step-idx)
       :log-file        (log-file step step-idx (:condor-log-dir condor-map)))))
@@ -490,9 +469,7 @@
 
 (defn input-executable
   [step-map]
-  (if-not (containerized? step-map)
-    "java"
-    "docker"))
+  "docker")
 
 (defn input-stdout
   "Takes in the step index and the input index and returns the path to the
@@ -520,9 +497,7 @@
   "Formats the arguments to porklock for an input job."
   [condor-map step-map source input-map]
   (let [file-metadata (or (:file-metadata condor-map) [])
-        arg-prefix    (if-not (containerized? step-map)
-                        (str "-jar " (cfg/jar-path))
-                        (str "run --rm -a stdout -a stderr -v $(pwd):/de-app-work -w /de-app-work discoenv/porklock:" (cfg/porklock-tag)))]
+        arg-prefix    (str "run --rm -a stdout -a stderr -v $(pwd):/de-app-work -w /de-app-work discoenv/porklock:" (cfg/porklock-tag))]
     (str arg-prefix
          " get --user " (:username condor-map)
          " --source " (quote-value
@@ -556,7 +531,6 @@
      :multi           (:multiplicity input)
      :source          (:value input)
      :executable      (input-executable step-map)
-     :environment     (filetool-env)
      :arguments       (input-arguments
                        condor-map
                        step-map
@@ -586,20 +560,14 @@
 (defn output-arguments
   "Formats the porklock arguments for output jobs."
   [step-map user source dest]
-  (let [arg-prefix (if-not (containerized? step-map)
-                     (str "-jar " (cfg/jar-path))
-                     (str "run --rm -a stdout -a stderr -v $(pwd):/de-app-work -w /de-app-work discoenv/porklock:" (cfg/porklock-tag)))]
+  (let [arg-prefix (str "run --rm -a stdout -a stderr -v $(pwd):/de-app-work -w /de-app-work discoenv/porklock:" (cfg/porklock-tag))]
     (str arg-prefix
          " put --user " user
          " --source " (quote-value source)
          " --destination " (quote-value dest)
          " --config logs/irods-config")))
 
-(defn output-executable
-  [step-map]
-  (if-not (containerized? step-map)
-    "java"
-    "docker"))
+(defn output-executable [step-map] "docker")
 
 (defn output-id-str
   "Generates an identifier for output jobs based on the step index and the
@@ -632,7 +600,6 @@
      :submission_date (:submission_date condor-map)
      :retain          (:retain output)
      :multi           (:multiplicity output)
-     :environment     (filetool-env)
      :executable      (output-executable step-map)
      :arguments       (output-arguments
                        step-map
@@ -728,21 +695,6 @@
       (str "--exclude " (string/join "," all-paths))
       "")))
 
-(defn imkdir-job-map
-  "Formats a job definition for the imkdir job, which is run first
-   and creates the iRODS output directory."
-  [output-dir condor-log username]
-  {:id "imkdir"
-   :status "Submitted"
-   :environment (filetool-env)
-   :executable "java"
-   :stderr "logs/imkdir-stderr"
-   :stdout "logs/imkdir-stdout"
-   :log-file (ut/path-join condor-log "logs" "imkdir-log")
-   :arguments (str "-jar " (cfg/jar-path)
-                   " mkdir --user " username
-                   " --destination " (quote-value output-dir))})
-
 (defn meta-analysis-id
   [{analysis-id :app_id :as condor-map}]
   (if-not (nil? analysis-id)
@@ -767,11 +719,7 @@
   [{analysis-id :app_id uuid :uuid :as condor-map}]
   (-> condor-map meta-analysis-id meta-app-execution))
 
-(defn shotgun-executable
-  [condor-map]
-  (if-not (containerized? (first (:steps condor-map)))
-    "java"
-    "docker"))
+(defn shotgun-executable [condor-map] "docker")
 
 (defn shotgun-arguments
   [{output-dir    :output_dir
@@ -781,9 +729,7 @@
     file-metadata :file-metadata
     :or {file-metadata []}
     :as condor-map}]
-  (let [arg-prefix (if-not (containerized? (first (:steps condor-map)))
-                     (str "-jar " (cfg/jar-path))
-                     (str "run --rm -a stdout -a stderr -v $(pwd):/de-app-work -w /de-app-work discoenv/porklock:" (cfg/porklock-tag)))]
+  (let [arg-prefix (str "run --rm -a stdout -a stderr -v $(pwd):/de-app-work -w /de-app-work discoenv/porklock:" (cfg/porklock-tag))]
     (str arg-prefix
          " put --user " username
          " --config irods-config"
@@ -808,25 +754,18 @@
   {:id          "output-last"
    :status      "Submitted"
    :executable  (shotgun-executable condor-map)
-   :environment (filetool-env)
    :stderr      "logs/output-last-stderr"
    :stdout      "logs/output-last-stdout"
    :log-file    "logs/output-last-log"
    :arguments   (shotgun-arguments condor-map)})
 
 (defn extra-jobs
-  "Associates the :final-output-job and :imkdir-job definitions
+  "Associates the :final-output-job definition
    with condor-map. Returns a new version of condor-map."
   [condor-map]
   (assoc condor-map
     :final-output-job
-    (shotgun-job-map condor-map)
-
-    :imkdir-job
-    (imkdir-job-map
-     (:output_dir condor-map)
-     (:condor-log-dir condor-map)
-     (:username condor-map))))
+    (shotgun-job-map condor-map)))
 
 (defn rm-step-component
   "Removes the :component key-value pair from each step in condor-map.
@@ -862,6 +801,7 @@
          add-analysis-metadata
          set-container-images
          steps
+         data-containers
          input-jobs
          output-jobs
          all-input-jobs

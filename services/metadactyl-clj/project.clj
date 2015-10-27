@@ -41,18 +41,13 @@
                  [ring "1.2.2"]
                  [net.sf.json-lib/json-lib "2.4" :classifier "jdk15"]
                  [slingshot "0.10.3"]]
-  :plugins [[org.iplantc/lein-iplant-rpm "5.0.0"]
-            [lein-ring "0.9.4"]
+  :plugins [[lein-ring "0.9.4"]
             [lein-swank "1.4.4"]]
   :profiles {:dev {:resource-paths ["conf/test"]}}
-  :aot [metadactyl.core
-        metadactyl.protocols
-        metadactyl.service.apps.de
-        metadactyl.service.apps.agave
-        metadactyl.service.apps.combined
-        metadactyl.service.apps.de.jobs.condor
-        metadactyl.service.apps.de.jobs.fapi
-        metadactyl.service.apps.de.jobs.protocol]
+  ;; compojure-api route macros should not be AOT compiled:
+  ;; https://github.com/metosin/compojure-api/issues/135#issuecomment-121388539
+  ;; https://github.com/metosin/compojure-api/issues/102
+  :aot [#"metadactyl.(?!routes).*"]
   :main metadactyl.core
   :ring {:handler metadactyl.routes.api/app
          :init metadactyl.core/load-config-from-file

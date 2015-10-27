@@ -32,11 +32,7 @@
                  [postgresql "9.1-901-1.jdbc4"]
                  [slingshot "0.10.3"]
                  [clj-http "1.0.0"]]
-  :plugins [[org.iplantc/lein-iplant-cmdtar "5.0.0"]
-            [org.iplantc/lein-iplant-rpm "5.0.0"]
-            [lein-marginalia "0.7.1"]]
-  :iplant-rpm {:summary "Facepalm"
-               :type :command}
+  :plugins [[lein-marginalia "0.7.1"]]
   :aot :all
   :main facepalm.core
   :repositories [["sonatype-nexus-snapshots"

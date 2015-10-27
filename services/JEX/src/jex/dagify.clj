@@ -1,6 +1,7 @@
 (ns jex.dagify
   (:use [clojure-commons.file-utils :as ut]
-        [clojure.string :only (join split trim blank?)])
+        [clojure.string :only (join split trim blank?)]
+        [jex.common])
   (:require [jex.config :as cfg]
             [clojure.tools.logging :as log]
             [me.raynes.fs :as fs])
@@ -72,7 +73,7 @@
    (ipc-exe-path analysis-map)
    "should_transfer_files = YES\n"
    "transfer_input_files = iplant.sh,irods-config,iplant.cmd\n"
-   "transfer_output_files = logs/de-transfer-trigger.log\n"
+   "transfer_output_files = logs/de-transfer-trigger.log,logs/output-last-stdout,logs/output-last-stderr\n"
    "when_to_transfer_output = ON_EXIT_OR_EVICT\n"
    "notification = NEVER\n"
    "queue\n"))
@@ -91,12 +92,11 @@
    script that will be executed out on the Condor nodes. This also
    handles capturing the exit value of a command in the shell script."
   [job-def]
-  (let [env    (:environment job-def)
-        exec   (:executable job-def)
+  (let [exec   (:executable job-def)
         args   (:arguments job-def)
         stderr (:stderr job-def)
         stdout (:stdout job-def)]
-    (str env " " exec " " args " 1> " stdout " 2> " stderr "\n"
+    (str exec " " args " 1> " stdout " 2> " stderr "\n"
          "if [ ! \"$?\" -eq \"0\" ]; then\n"
              "\tEXITSTATUS=1\n"
          "fi\n")))
@@ -119,6 +119,89 @@
   [image-name]
   (str "docker pull " image-name "\n" fail-script))
 
+(defn- dc-pull
+  [name tag]
+  (str "docker pull " name ":" tag "\n"
+       fail-script))
+
+(defn data-containers-pull-sh
+  [{data-containers :data-containers :as condor-map}]
+  (if (pos? (count data-containers))
+    (join "" (map #(dc-pull (:name %1) (:tag %1)) data-containers))
+    ""))
+
+(defn- dc-vol-host?
+  [dc-map]
+  (and (contains? dc-map :host_path)
+       (not (blank? (:host_path dc-map)))))
+
+(defn dc-vol-container?
+  [dc-map]
+  (and (contains? dc-map :container_path)
+       (not (blank? (:container_path dc-map)))))
+
+(defn- dc-vol?
+  [dc-map]
+  (or (dc-vol-host? dc-map)
+      (dc-vol-container? dc-map)))
+
+(defn dc-vol-read-only?
+  [dc-map]
+  (if (contains? dc-map :read_only)
+    (:read_only dc-map)
+    false))
+
+(defn- dc-create
+  [uuid dc-map]
+  (str
+   "docker create "
+
+   (if (dc-vol? dc-map)
+     "-v ")
+
+   (cond
+     (and (dc-vol-host? dc-map)
+          (dc-vol-container? dc-map)
+          (dc-vol-read-only? dc-map))
+     (str (:host_path dc-map) ":" (:container_path dc-map) ":ro ")
+
+     (and (dc-vol-host? dc-map)
+          (dc-vol-container? dc-map)
+          (not (dc-vol-read-only? dc-map)))
+     (str (:host_path dc-map) ":" (:container_path dc-map) " ")
+
+     (and (dc-vol-container? dc-map)
+          (not (dc-vol-host? dc-map))
+          (dc-vol-read-only? dc-map))
+     (str (:container_path dc-map) ":ro ")
+
+     (and (dc-vol-container? dc-map)
+          (not (dc-vol-host? dc-map))
+          (not (dc-vol-read-only? dc-map)))
+     (str (:container_path dc-map) " ")
+
+     :else "")
+
+   "--name " (volumes-from-name uuid (:name_prefix dc-map)) " "
+   (:name dc-map) ":" (:tag dc-map) "\n"
+   fail-script))
+
+(defn data-containers-create
+  [{uuid :uuid data-containers :data-containers :as condor-map}]
+  (if (pos? (count data-containers))
+    (join "" (map (partial dc-create uuid) data-containers))
+    ""))
+
+(defn- dc-rm
+  [uuid dc-map]
+  (str "docker rm " (volumes-from-name uuid (:name_prefix dc-map))))
+
+(defn data-containers-rm
+  [{uuid :uuid data-containers :data-containers :as condor-map}]
+  (if (pos? (count data-containers))
+    (join "\n" (map (partial dc-rm uuid) data-containers))
+    ""))
+
 (defn script
   "Takes in an analysis map that has been processed by
    (jex.incoming-xforms/transform) and turns it into a shell script
@@ -126,7 +209,8 @@
   [analysis-map]
   (let [job-uuid  (:uuid analysis-map)
         job-dir   (str "iplant-de-jobs/" (:username analysis-map) "/" job-uuid)
-        irods-cfg (irods-config-path analysis-map)]
+        irods-cfg (irods-config-path analysis-map)
+        data-container-name (str "data-" job-uuid)]
     (str
      "#!/bin/bash\n"
      "set -x\n"
@@ -142,8 +226,11 @@
      "ls -al > logs/de-transfer-trigger.log\n"
      fail-script
      rearrange-working-dir
+     (data-containers-pull-sh analysis-map) "\n"
      (join "" (map docker-pull (seq (:container-images analysis-map))))
+     (data-containers-create analysis-map)
      (join "\n" (map script-line (jobs-in-order analysis-map)))
+     (data-containers-rm analysis-map) "\n"
      "hostname\n"
      "ps aux\n"
      "echo -----\n"

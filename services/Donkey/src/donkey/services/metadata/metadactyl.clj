@@ -1,9 +1,9 @@
 (ns donkey.services.metadata.metadactyl
   (:use [clojure.java.io :only [reader]]
+        [clojure-commons.client :only [build-url-with-query]]
         [donkey.util.config]
         [donkey.util.transformers :only [secured-params add-current-user-to-map]]
         [donkey.auth.user-attributes]
-        [donkey.clients.user-info :only [get-user-details]]
         [donkey.services.user-prefs :only [user-prefs]]
         [donkey.util.email]
         [donkey.util.service])
@@ -11,6 +11,7 @@
             [clj-http.client :as client]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
+            [donkey.clients.iplant-groups :as ipg]
             [donkey.clients.data-info :as di]
             [donkey.clients.metadactyl :as dm]
             [donkey.clients.notifications :as dn]
@@ -130,7 +131,7 @@
   (if (<= 200 (:status res) 299)
     (let [tool-req     (cheshire/decode-stream (reader (:body res)) true)
           username     (string/replace (:submitted_by tool-req) #"@.*" "")
-          user-details (get-user-details username)]
+          user-details (ipg/format-like-trellis (ipg/lookup-subject-add-empty username username))]
       (f tool-req user-details))
     res))
 

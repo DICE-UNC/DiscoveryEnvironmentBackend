@@ -26,15 +26,6 @@
    (GET "/filetypes/type-list" []
         (garnish/get-type-list))
 
-   (GET "/filetypes/type/paths" [:as {:keys [params]}]
-        (garnish/find-typed-paths params))
-
-   (GET "/filetypes/auto-type" [:as {:keys [params]}]
-        (garnish/preview-auto-type params))
-
-   (POST "/filetypes/auto-type" [:as {:keys [body params]}]
-         (garnish/set-auto-type body params))
-
    (POST "/share" [:as req]
          (share req))
 

@@ -1,0 +1,1 @@
+([:dependencies ([org.clojure/clojure "1.6.0"] [fleet/fleet "0.10.2"])])

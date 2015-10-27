@@ -27,6 +27,91 @@
          (not-found-response (str "A container for " ~tool-id " was not found."))
          (success-response retval#)))))
 
+(defroutes* container-images
+  (GET* "/" [:as {uri :uri}]
+        :query [params SecuredQueryParams]
+        :return Images
+        :summary "List Container Images"
+        :description "Returns all of the container images defined in the database."
+        (service/trap uri list-images))
+
+  (GET* "/:image-id" [:as {uri :uri}]
+        :path-params [image-id :- ImageId]
+        :query [params SecuredQueryParams]
+        :return Image
+        :summary "Container Image"
+        :description "Returns a JSON description of a container image."
+        (service/trap uri image-info image-id))
+
+  (POST* "/" [:as {uri :uri}]
+        :query [params SecuredQueryParams]
+        :body [body NewImage]
+        :return Image
+        :summary "Add Container Image"
+        :description "Adds a new container image to the system."
+        (service/trap uri add-image-info body))
+
+  (POST* "/:image-id/name" [:as {uri :uri}]
+        :path-params [image-id :- ImageId]
+        :query [params SecuredQueryParams]
+        :body [body ImageName]
+        :return Image
+        :summary "Update Container Image Name"
+        :description "Updates a container image's name field."
+        (service/trap uri modify-image-info image-id body))
+
+  (POST* "/:image-id/url" [:as {uri :uri}]
+        :path-params [image-id :- ImageId]
+        :query [params SecuredQueryParams]
+        :body [body ImageURL]
+        :return Image
+        :summary "Update Container Image URL"
+        :description "Updates a container image's url field."
+        (service/trap uri modify-image-info image-id body))
+
+  (POST* "/:image-id/tag" [:as {uri :uri}]
+        :path-params [image-id :- ImageId]
+        :query [params SecuredQueryParams]
+        :body [body ImageTag]
+        :return Image
+        :summary "Update Container Image Tag"
+        :description "Updates a container image's tag field."
+        (service/trap uri modify-image-info image-id body))
+
+  (DELETE* "/:image-id" [:as {uri :uri}]
+        :path-params [image-id :- ImageId]
+        :query [params SecuredQueryParams]
+        :return nil
+        :summary "Delete Container Image"
+        :description "Deletes a container image from the system."
+        (service/trap uri delete-image image-id)))
+
+ (defroutes* data-containers
+   (GET* "/" [:as {uri :uri}]
+         :query [params SecuredQueryParams]
+         :return DataContainers
+         :summary "List Data Containers"
+         :description "Lists all of the available data containers."
+         (service/trap uri list-data-containers))
+
+   (GET* "/:data-container-id" [:as {uri :uri}]
+         :path-params [data-container-id :- DataContainerIdParam]
+         :query [params SecuredQueryParams]
+         :return DataContainer
+         :summary "Data Container"
+         :description "Returns a JSON description of a data container."
+         (service/trap uri data-container data-container-id)))
+
+(defroutes* admin-data-containers
+  (PATCH* "/:data-container-id" [:as {uri :uri}]
+          :path-params [data-container-id :- DataContainerIdParam]
+          :query [params SecuredQueryParams]
+          :body [body DataContainerUpdateRequest]
+          :return DataContainer
+          :summary "Update Data Container"
+          :description "Updates a data container's settings."
+          (service/trap uri modify-data-container data-container-id body)))
+
 (defroutes* tools
   (GET* "/" [:as {uri :uri}]
         :query [params ToolSearchParams]
@@ -83,7 +168,7 @@
         :query [params SecuredQueryParams]
         :return DeviceContainerPath
         :summary "Tool Device Container Path"
-        :description "Returns a device's host path."
+        :description "Returns a device's in-container path."
         (ce/trap uri (requester tool-id (device-field tool-id device-id :container_path))))
 
   (GET* "/:tool-id/container/cpu-shares" [:as {uri :uri}]
@@ -179,16 +264,9 @@
         :query [params SecuredQueryParams]
         :return VolumesFrom
         :summary "Tool Container Volumes From Information"
-        :description "Returns a list of container names that the container associated with the tool should import volumes from."
-        (ce/trap uri (requester tool-id (tool-volumes-from tool-id volumes-from-id))))
-
-  (GET* "/:tool-id/container/volumes-from/:volumes-from-id/name" [:as {uri :uri}]
-        :path-params [tool-id :- ToolIdParam volumes-from-id :- VolumesFromIdParam]
-        :query [params SecuredQueryParams]
-        :return VolumesFromName
-        :summary "Name Of Volume Host Container"
-        :description "Returns the name of the container from which the tool container will bind mount volumes."
-        (ce/trap uri (requester tool-id (volumes-from-field tool-id volumes-from-id :name)))))
+        :description "Returns the data container settings for the given `volumes-from-id` the tool
+         should import volumes from."
+        (ce/trap uri (requester tool-id (tool-volumes-from tool-id volumes-from-id)))))
 
 (defroutes* tool-requests
   (GET* "/" [:as {uri :uri}]
@@ -269,7 +347,7 @@
          :body [body DeviceContainerPath]
          :return DeviceContainerPath
          :summary "Update Tool Device Container Path"
-         :description "This endpoint updates a device's host path for the tool's container."
+         :description "This endpoint updates a device's container path for the tool's container."
          (ce/trap uri (requester tool-id (update-device-field tool-id device-id :container_path (:container_path body)))))
 
   (POST* "/:tool-id/container/entrypoint" [:as {uri :uri}]
@@ -332,7 +410,7 @@
          :body [body NewVolume]
          :return Volume
          :summary "Tool Container Volume Information"
-         :description "Returns volume information for the container associated with a tool."
+         :description "This endpoint updates volume information for the container associated with a tool."
          (ce/trap uri (requester tool-id (add-tool-volume tool-id body))))
 
   (DELETE* "/:tool-id/container/volumes/:volume-id" [:as {uri :uri}]
@@ -361,7 +439,7 @@
          :description "This endpoint updates a volume container path for the tool's container."
          (ce/trap uri (requester tool-id (update-volume-field tool-id volume-id :container_path (:container_path body)))))
 
-  (POST* "/:tool-id/container/volumes-from" [:as {uri :uri}]
+  (PUT* "/:tool-id/container/volumes-from" [:as {uri :uri}]
          :path-params [tool-id :- ToolIdParam]
          :query [params SecuredQueryParams]
          :body [body NewVolumesFrom]
@@ -378,15 +456,4 @@
            :return nil
            :summary "Delete Tool Container Volumes From Information"
            :description "Deletes a container name that the tool container should import volumes from."
-           (ce/trap uri #(delete-tool-volumes-from tool-id volumes-from-id)))
-
-  (POST* "/:tool-id/container/volumes-from/:volumes-from-id/name" [:as {uri :uri}]
-         :path-params [tool-id :- ToolIdParam volumes-from-id :- VolumesFromIdParam]
-         :query [params SecuredQueryParams]
-         :body [body VolumesFromName]
-         :return VolumesFromName
-         :summary "Update Name Of Volume Host Container"
-         :description (str
-                        "Updates the name of a container from which the tool container will bind mount volumes."
-                        volumes-from-warning)
-         (ce/trap uri (requester tool-id (update-volumes-from-field tool-id volumes-from-id :name (:name body))))))
+           (ce/trap uri #(delete-tool-volumes-from tool-id volumes-from-id))))

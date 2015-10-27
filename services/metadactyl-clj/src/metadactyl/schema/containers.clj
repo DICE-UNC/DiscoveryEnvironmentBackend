@@ -1,6 +1,6 @@
 (ns metadactyl.schema.containers
   (:use [compojure.api.sweet :only [describe]]
-        [metadactyl.routes.params :only [ToolIdParam]])
+        [metadactyl.routes.params :only [->optional-param ToolIdParam]])
   (:require [schema.core :as s]))
 
 (s/defschema Image
@@ -8,13 +8,38 @@
    {:name                 s/Str
     :id                   s/Uuid
     (s/optional-key :tag) s/Str
-    :url                  s/Str}
+    (s/optional-key :url) (s/maybe s/Str)}
    "A map describing a container image."))
+
+(s/defschema Images
+  (describe
+    {:container_images [Image]}
+    "A list of container images."))
 
 (s/defschema NewImage
   (describe
    (dissoc Image :id)
    "The values needed to add a new image to a tool."))
+
+(s/defschema ImageId
+  (describe
+    java.util.UUID
+    "A container image UUID."))
+
+(s/defschema ImageName
+  (describe
+    {:name s/Str}
+    "The image's name."))
+
+(s/defschema ImageTag
+  (describe
+    {:tag s/Str}
+    "The image's tag."))
+
+(s/defschema ImageURL
+  (describe
+    {:url s/Str}
+    "The image's URL."))
 
 (s/defschema Settings
   (describe
@@ -126,21 +151,39 @@
    {:container_path s/Str}
    "The path to a bind mounted volume in the tool container."))
 
-(s/defschema VolumesFrom
+(s/defschema DataContainer
   (describe
-   {:name s/Str
-    :id   s/Uuid}
-   "The name of a container from which to bind mount volumes."))
+    (merge (dissoc Image :id)
+      {:id                         s/Uuid
+       :name_prefix                s/Str
+       (s/optional-key :read_only) s/Bool})
+    "A description of a data container."))
+
+(s/defschema DataContainers
+  (describe
+   {:data_containers [DataContainer]}
+   "A list of data containers."))
+
+(s/defschema DataContainerIdParam
+  (describe
+    java.util.UUID
+    "A data container's UUID."))
+
+(s/defschema DataContainerUpdateRequest
+  (describe
+    (-> DataContainer
+        (->optional-param :name_prefix)
+        (->optional-param :name)
+        (dissoc :id))
+    "A map for updating data container settings."))
+
+(s/defschema VolumesFrom
+  (describe DataContainer "A description of a data container volumes-from settings."))
 
 (s/defschema NewVolumesFrom
   (describe
    (dissoc VolumesFrom :id)
    "A map for adding a new container from which to bind mount volumes."))
-
-(s/defschema VolumesFromName
-  (describe
-   {:name s/Str}
-   "The name of a container from which volumes will be bind mounted."))
 
 (def VolumesFromIdParam
   (describe

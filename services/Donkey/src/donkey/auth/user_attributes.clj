@@ -1,9 +1,8 @@
 (ns donkey.auth.user-attributes
-  (:use [donkey.util.config])
-  (:require [clj-cas.cas-proxy-auth :as cas]
-            [clojure.string :as string]
-            [clojure.tools.logging :as log]
-            [donkey.clients.user-info :as du]))
+  (:require [clojure.tools.logging :as log]
+            [clj-cas.cas-proxy-auth :as cas]
+            [donkey.util.config :as cfg]))
+
 
 (def
   ^{:doc "The authenticated user or nil if the service is unsecured."
@@ -15,7 +14,7 @@
    validate-cas-proxy-ticket."
   [{:keys [user-attributes]}]
   (log/trace user-attributes)
-  {:username      (str (get user-attributes "uid") "@" (uid-domain)),
+  {:username      (str (get user-attributes "uid") "@" (cfg/uid-domain)),
    :password      (get user-attributes "password"),
    :email         (get user-attributes "email"),
    :shortUsername (get user-attributes "uid")
@@ -23,21 +22,9 @@
    :lastName      (get user-attributes "lastName")
    :principal     (get user-attributes "principal")})
 
-(defn user-from-user-info
-  "Creates a map of values from user attributes retrieved from the user info service."
-  [username]
-  (let [short-username (string/replace username #"@.*" "")
-        user-info      (du/get-user-details short-username)]
-    {:username      username
-     :password      nil
-     :email         (:email user-info)
-     :shortUsername short-username
-     :firstName     (:firstname user-info)
-     :lastName      (:lastname user-info)}))
-
 (defn fake-user-from-attributes
   "Creates a real map of fake values for a user base on environment variables."
-  [placeholder & args]
+  [& _]
   {:username      (System/getenv "IPLANT_CAS_USER")
    :password      (System/getenv "IPLANT_CAS_PASS")
    :email         (System/getenv "IPLANT_CAS_EMAIL")
@@ -70,7 +57,7 @@
 
 (defn fake-store-current-user
   "Fake storage of a user"
-  [handler & cas-config-fns]
+  [handler & _]
   (fn [req]
     (log/info "Storing current user from IPLANT_CAS_* env vars.")
     (binding [current-user (fake-user-from-attributes req)]
@@ -86,11 +73,4 @@
    for debugging in the REPL."
   [[user] & body]
   `(binding [current-user (user-from-attributes {:user-attributes ~user})]
-     (do ~@body)))
-
-(defmacro with-directory-user
-  "Performs a task with user information for the given username bound to current-user. This
-   macro is used for callback endpoints."
-  [[username] & body]
-  `(binding [current-user (user-from-user-info ~username)]
      (do ~@body)))

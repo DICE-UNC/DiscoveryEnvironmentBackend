@@ -8,17 +8,15 @@
 (defroutes* home
 
   (context* "/home" []
-    :tags ["User Home Dirs"]
+    :tags ["home"]
 
     (GET* "/" [:as {uri :uri}]
       :query [params SecuredQueryParamsRequired]
       :return PathIdInfo
       :summary "Get User's Home Dir"
-      :description
+      :description (str
 "This endpoint returns the ID and path of a user's home directory, creating it if it does not
- already exist.
-
-#### Error codes:
-
-      ERR_NOT_A_USER"
+ already exist."
+(get-error-code-block
+  "ERR_NOT_A_USER"))
       (svc/trap uri home/do-homedir params))))

@@ -54,7 +54,9 @@
     (app-comment-routes)
     (analysis-routes)
     (reference-genomes-routes)
-    (tool-routes)))
+    (tool-routes)
+    (route/not-found (unrecognized-path-response))))
+
 
 (defn secured-routes
   []
@@ -153,12 +155,10 @@
     (unsecured-misc-routes)
     (unsecured-notification-routes)
     (unsecured-tree-viewer-routes)
-    (unsecured-fileio-routes)
     (unsecured-callback-routes)
     (context "/admin" [] admin-handler)
     (context "/secured" [] secured-handler)
-    secured-handler-no-context
-    (route/not-found (unrecognized-path-response))))
+    secured-handler-no-context))
 
 
 (defn- start-nrepl

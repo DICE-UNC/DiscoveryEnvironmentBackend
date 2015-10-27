@@ -1,5 +1,4 @@
 anon-files
-backwards-compat
 clockwork
 condor-log-monitor
 curl-wrapper
@@ -13,6 +12,7 @@ facepalm
 info-typer
 infosquito
 iplant-email
+iplant-groups
 jex
 jex-events
 kifshare
@@ -26,3 +26,4 @@ saved-searches
 tree-urls
 user-preferences
 user-sessions
+uuid-corrector

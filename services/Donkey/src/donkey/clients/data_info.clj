@@ -1,5 +1,6 @@
 (ns donkey.clients.data-info
   (:use [donkey.auth.user-attributes :only [current-user]]
+        [clj-jargon.init :only [with-jargon]]
         [slingshot.slingshot :only [throw+ try+]])
   (:require [clojure.string :as string]
             [clojure.tools.logging :as log]
@@ -9,6 +10,8 @@
             [me.raynes.fs :as fs]
             [clj-icat-direct.icat :as db]
             [clojure-commons.error-codes :as error]
+            [clojure-commons.file-utils :as ft]
+            [clojure-commons.assertions :as assertions]
             [donkey.services.filesystem.common-paths :as cp]
             [donkey.services.filesystem.create :as cr]
             [donkey.services.filesystem.exists :as e]
@@ -86,6 +89,30 @@
         :paths
         (get path))))
 
+(defn rename
+  "Uses the data-info set-name endpoint to rename a file within the same directory."
+  [params body]
+  (with-jargon (icat/jargon-cfg) [cm]
+    (assertions/assert-valid (= (ft/dirname (:dest body)) (ft/dirname (:source body)))
+        "The directory names of the source and destination must match for this endpoint.")
+    (let [path-uuid (:id (uuids/uuid-for-path cm (:user params) (:source body)))
+          url (url/url (cfg/data-info-base-url) "data" path-uuid "name")
+          req-map {:query-params (select-keys params [:user])
+                   :content-type :json
+                   :body         (json/encode {:filename (ft/basename (:dest body))})}]
+      (http/put (str url) req-map))))
+
+(defn move-contents
+  "Uses the data-info set-children-directory-name endpoint to move the contents of one directory
+   into another directory."
+  [params body]
+  (with-jargon (icat/jargon-cfg) [cm]
+    (let [path-uuid (:id (uuids/uuid-for-path cm (:user params) (:source body)))
+          url (url/url (cfg/data-info-base-url) "data" path-uuid "children" "dir")
+          req-map {:query-params (select-keys params [:user])
+                   :content-type :json
+                   :body         (json/encode {:dirname (:dest body)})}]
+      (http/put (str url) req-map))))
 
 (defn get-or-create-dir
   "Returns the path argument if the path exists and refers to a directory.  If
@@ -220,27 +247,27 @@
 
 
 (defn ^Boolean uuid-accessible?
-  "Indicates if a filesystem entry is readble by a given user.
+  "Indicates if a data item is readable by a given user.
 
    Parameters:
      user     - the authenticated name of the user
-     entry-id - the UUID of the filesystem entry
+     data-id  - the UUID of the data item
 
    Returns:
-     It returns true if the user can access the entry, otherwise false"
-  [^String user ^UUID entry-id]
-  (uuids/uuid-accessible? user entry-id))
+     It returns true if the user can access the data item, otherwise false"
+  [^String user ^UUID data-id]
+  (uuids/uuid-accessible? user data-id))
 
 
 (defn validate-uuid-accessible
-  "Throws an exception if the given entry is not accessible to the given user.
+  "Throws an exception if the given data item is not accessible to the given user.
 
    Parameters:
      user     - the authenticated name of the user
-     entry-id - the UUID of the filesystem entry"
-  [^String user ^UUID entry-id]
-  (when-not (uuid-accessible? user entry-id)
-    (throw+ {:error_code error/ERR_NOT_FOUND :uuid entry-id})))
+     data-id  - the UUID of the data item"
+  [^String user ^UUID data-id]
+  (when-not (uuid-accessible? user data-id)
+    (throw+ {:error_code error/ERR_NOT_FOUND :uuid data-id})))
 
 
 (defn ^Boolean owns?
@@ -248,24 +275,24 @@
 
    Parameters:
      user       - the username of the user
-     entry-path - The absolute path to the file or folder
+     data-path - The absolute path to the file or folder
 
    Returns:
-     It returns true if the user own the entry, otherwise false."
-  [^String user ^String entry-path]
-  (users/owns? user entry-path))
+     It returns true if the user own the data item, otherwise false."
+  [^String user ^String data-path]
+  (users/owns? user data-path))
 
 
 (defn ^String resolve-data-type
-  "Given filesystem id, it returns the type of the entry it is, file or folder.
+  "Given filesystem id, it returns the type of data item it is, file or folder.
 
    Parameters:
-     entry-id - The UUID of the entry to inspect
+     data-id - The UUID of the data item to inspect
 
    Returns:
-     The type of the entry, `file` or `folder`"
-  [^UUID entry-id]
-  (icat/resolve-data-type entry-id))
+     The type of the data item, `file` or `folder`"
+  [^UUID data-id]
+  (icat/resolve-data-type data-id))
 
 
   (defn ^IPersistentMap share
@@ -329,18 +356,18 @@
     (svc/request-failure full-msg)))
 
 
-(defn ^String mk-entries-path-url-path
-  "This function constructs the url path to the resource backing a given data entry.
+(defn ^String mk-data-path-url-path
+  "This function constructs the url path to the resource backing a given data item.
 
    Parameters:
-     path - the absolute iRODS path to the data entry
+     path - the absolute iRODS path to the data item 
 
    Returns:
      It returns the data-info URL path to the corresponding resource"
   [^String path]
   (let [nodes (fs/split path)
         nodes (if (= "/" (first nodes)) (next nodes) nodes)]
-    (str "entries/path/" (string/join "/" (map url/url-encode nodes)))))
+    (str "data/path/" (string/join "/" (map url/url-encode nodes)))))
 
 
 (defn respond-with-default-error

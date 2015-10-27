@@ -17,8 +17,7 @@
   :profiles {:uberjar {:aot :all}}
   :dependencies [[org.clojure/clojure "1.6.0"]
                  [org.iplantc/clj-jargon "5.0.0"
-                  :exclusions [[org.slf4j/slf4j-api]
-                               [org.slf4j/slf4j-log4j12]
+                  :exclusions [[org.slf4j/slf4j-log4j12]
                                [log4j]]]
                  [org.iplantc/service-logging "5.0.0"]
                  [org.iplantc/common-cli "5.0.0"]
@@ -26,5 +25,4 @@
                  [medley "0.6.0"]
                  [compojure "1.3.4"]
                  [ring "1.3.2"]]
-  :plugins [[lein-ring "0.9.3"]
-            [org.iplantc/lein-iplant-rpm "5.0.0"]])
+  :plugins [[lein-ring "0.9.3"]])
