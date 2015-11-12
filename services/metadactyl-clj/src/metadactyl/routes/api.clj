@@ -1,26 +1,11 @@
 (ns metadactyl.routes.api
-  (:use [clojure-commons.middleware :only [log-validation-errors]]
+  (:use [service-logging.middleware :only [wrap-logging clean-context]]
+        [compojure.core :only [wrap-routes]]
         [clojure-commons.query-params :only [wrap-query-params]]
-        [compojure.api.sweet]
-        [metadactyl.routes.domain.analysis]
-        [metadactyl.routes.domain.analysis.listing]
-        [metadactyl.routes.domain.app]
-        [metadactyl.routes.domain.app.category]
-        [metadactyl.routes.domain.app.element]
-        [metadactyl.routes.domain.app.rating]
-        [metadactyl.routes.domain.callback]
-        [metadactyl.routes.domain.collaborator]
-        [metadactyl.routes.domain.oauth]
-        [metadactyl.routes.domain.pipeline]
-        [metadactyl.routes.domain.reference-genome]
-        [metadactyl.routes.domain.tool]
-        [metadactyl.routes.domain.user]
-        [metadactyl.routes.domain.workspace]
-        [metadactyl.routes.params]
-        [metadactyl.schema.containers]
+        [common-swagger-api.schema]
         [metadactyl.user :only [store-current-user]]
         [ring.middleware keyword-params nested-params]
-        [ring.swagger.json-schema :only [json-type]]
+        [service-logging.middleware :only [add-user-to-context]]
         [ring.util.response :only [redirect]])
   (:require [compojure.route :as route]
             [metadactyl.routes.admin :as admin-routes]
@@ -39,27 +24,10 @@
             [metadactyl.routes.workspaces :as workspace-routes]
             [metadactyl.util.config :as config]
             [metadactyl.util.service :as service]
-            [service-logging.thread-context :as tc]))
-
-(defmethod json-type schema.core.AnythingSchema [_] {:type "any"})
-
-(def context-map (ref {}))
-
-(defn set-context-map!
-  "Sets the map that will be used to create the ThreadContext by wrap-context-map."
-  [cm]
-  (dosync (ref-set context-map cm)))
-
-(defn wrap-context-map
-  "Sets the ThreadContext for each request."
-  [handler]
-  (fn [request]
-    (tc/set-context! @context-map)
-    (let [resp (handler request)]
-      (tc/clear-context!)
-      resp)))
+            [clojure-commons.exception :as cx]))
 
 (defapi app
+  {:exceptions cx/exception-handlers}
   (swagger-ui config/docs-uri)
   (swagger-docs
     {:info {:title "Discovery Environment Apps API"
@@ -82,15 +50,16 @@
             {:name "collaborator-routes", :description "Collaborator Information Routes"}
             {:name "admin-apps", :description "Admin App endpoints."}
             {:name "admin-categories", :description "Admin App Category endpoints."}
+            {:name "admin-container-images", :description "Admin Tool Docker Images endpoints."}
             {:name "admin-data-containers", :description "Admin Docker Data Container endpoints."}
             {:name "admin-tools", :description "Admin Tool endpoints."}
             {:name "admin-reference-genomes", :description "Admin Reference Genome endpoints."}
             {:name "admin-tool-requests", :description "Admin Tool Request endpoints."}]})
   (middlewares
-    [wrap-keyword-params
+    [clean-context
+     wrap-keyword-params
      wrap-query-params
-     wrap-context-map
-     log-validation-errors]
+     (wrap-routes wrap-logging)]
     (context* "/" []
       :tags ["service-info"]
       status-routes/status)
@@ -98,12 +67,12 @@
       :tags ["callbacks"]
       callback-routes/callbacks))
   (middlewares
-    [wrap-keyword-params
+    [clean-context
+     wrap-keyword-params
      wrap-query-params
-     tc/add-user-to-context
-     wrap-context-map
-     log-validation-errors
-     store-current-user]
+     add-user-to-context
+     store-current-user
+     wrap-logging]
     (context* "/apps/categories" []
       :tags ["app-categories"]
       app-category-routes/app-categories)
@@ -152,6 +121,9 @@
     (context* "/admin/reference-genomes" []
       :tags ["admin-reference-genomes"]
       admin-routes/reference-genomes)
+    (context* "/admin/tools/container-images" []
+      :tags ["admin-container-images"]
+      tool-routes/container-images)
     (context* "/admin/tools/data-containers" []
       :tags ["admin-data-containers"]
       tool-routes/admin-data-containers)

@@ -39,16 +39,6 @@
   [props config-valid configs]
   "donkey.cas.cas-server")
 
-(cc/defprop-str pgt-callback-base
-  "The base URL to use for proxy granting ticket callbacks from the CAS server."
-  [props config-valid configs]
-  "donkey.cas.pgt-callback-base")
-
-(cc/defprop-str pgt-callback-path
-  "The URL path to use for proxy granting ticket callbacks from the CAS server."
-  [props config-valid configs]
-  "donkey.cas.pgt-callback-path")
-
 (cc/defprop-str server-name
   "The name of the local server."
   [props config-valid configs]
@@ -403,10 +393,45 @@
   [props config-valid configs data-routes-enabled]
   "donkey.infosquito.es-url")
 
-(cc/defprop-str coge-genome-load-url
-  "The COGE service URL for loading genomes and creating viewer URLs."
+(cc/defprop-str jwt-private-signing-key
+  "The path to the private key used for signing JWT assertions."
+  [props config-valid configs]
+  "donkey.jwt.signing-key.private")
+
+(cc/defprop-str jwt-private-signing-key-password
+  "The password used to access the private key used for signing JWT assertions."
+  [props config-valid configs]
+  "donkey.jwt.signing-key.password")
+
+(cc/defprop-str jwt-public-signing-key
+  "The path to the public key used to validate JWT assertions."
+  [props config-valid configs]
+  "donkey.jwt.signing-key.public")
+
+(cc/defprop-str jwt-accepted-keys-dir
+  "The path to the directory containing public signing keys for JWT assertions."
+  [props config-valid configs]
+  "donkey.jwt.accepted-keys.dir")
+
+(cc/defprop-str jwt-signing-algorithm
+  "The algorithm used to sign JWT assertions."
+  [props config-valid configs]
+  "donkey.jwt.signing-key.algorithm")
+
+(cc/defprop-int jwt-validity-window-end
+  "The number of seconds before newly created JWT assertions expire."
+  [props config-valid configs]
+  "donkey.jwt.validity-window.end")
+
+(cc/defprop-str coge-base-url
+  "The base URL for CoGe services."
   [props config-valid configs coge-enabled]
-  "donkey.coge.genome-load-url")
+  "donkey.coge.base-url")
+
+(cc/defprop-str coge-data-folder-name
+  "The name of the coge data folder in each user's home folder."
+  [props config-valid configs coge-enabled]
+  "donkey.coge.data-folder-name")
 
 (cc/defprop-str coge-user
   "The COGE user that needs file sharing permissions for genome viewer services."
@@ -476,11 +501,6 @@
        (cfg/env-setting "TREE_URLS_PORT")
        (tree-urls-base-url)))))
 
-(cc/defprop-str donkey-base-url
-  "The Donkey base URL, which is used to build callback URLs for other DE components."
-  [props config-valid configs]
-  "donkey.base-url")
-
 (def get-allowed-groups
   (memoize
     (fn []
@@ -497,14 +517,14 @@
   (filter #(not (nil? %))
           [(icat-password) (icat-user) (irods-pass) (irods-user)]))
 
-(defn- oauth-settings
-  [api-name api-key api-secret token-uri redirect-uri refresh-window]
-  {:api-name       api-name
-   :client-key     api-key
-   :client-secret  api-secret
-   :token-uri      token-uri
-   :redirect-uri   redirect-uri
-   :refresh-window (* refresh-window 60 1000)})
+(defn jwt-opts
+  []
+  {:private-key-path     (jwt-private-signing-key)
+   :private-key-password (jwt-private-signing-key-password)
+   :public-key-path      (jwt-public-signing-key)
+   :alg                  (keyword (jwt-signing-algorithm))
+   :accepted-keys-dir    (jwt-accepted-keys-dir)
+   :validity-window-end  (jwt-validity-window-end)})
 
 (defn log-environment
   []

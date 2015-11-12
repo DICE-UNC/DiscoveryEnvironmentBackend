@@ -6,22 +6,26 @@
         [donkey.services.filesystem.validators]
         [kameleon.uuids :only [uuidify]]
         [clj-jargon.init :only [with-jargon]]
+        [clj-jargon.item-ops :only [input-stream]]
         [clj-jargon.metadata]
         [korma.db :only [transaction]]
         [slingshot.slingshot :only [try+ throw+]])
   (:require [clojure.tools.logging :as log]
-            [clojure.set :as set]
             [clojure.string :as string]
             [clojure-commons.file-utils :as ft]
             [cemerick.url :as url]
             [cheshire.core :as json]
             [clj-http.client :as http]
-            [clojure.data.codec.base64 :as b64]
             [dire.core :refer [with-pre-hook! with-post-hook!]]
+            [donkey.clients.metadata.raw :as metadata-client]
             [donkey.services.filesystem.icat :as icat]
             [donkey.services.filesystem.uuids :as uuids]
             [donkey.services.filesystem.validators :as validators]
-            [donkey.util.config :as cfg]))
+            [donkey.util.config :as cfg]
+            [donkey.util.service :as service]
+            [ring.middleware.multipart-params :as multipart])
+  (:import [au.com.bytecode.opencsv CSVReader]
+           [java.io InputStream]))
 
 (defn- fix-unit
   "Used to replace the IPCRESERVED unit with an empty string."
@@ -30,14 +34,14 @@
     (assoc avu :unit "")
     avu))
 
-(def ipc-regex #"(?i)^ipc")
+(def ^:private ipc-regex #"(?i)^ipc")
 
-(defn ipc-avu?
+(defn- ipc-avu?
   "Returns a truthy value if the AVU map passed in is reserved for the DE's use."
   [avu]
   (re-find ipc-regex (:attr avu)))
 
-(defn authorized-avus
+(defn- authorized-avus
   "Validation to make sure the AVUs aren't system AVUs. Throws a slingshot error
    map if the validation fails."
   [avus]
@@ -121,22 +125,6 @@
     (validators/path-exists cm path)
     (validators/path-writeable cm (cfg/irods-user) path)
     (common-metadata-set cm path avu-map)))
-
-(defn- encode-str
-  "Returns str-to-encode as a base 64 encoded string."
-  [str-to-encode]
-  (String. (b64/encode (.getBytes str-to-encode))))
-
-(defn- workaround-delete
-  "Gnarly workaround for a bug (I think) in Jargon. If a value
-   in an AVU is formatted a certain way, it can't be deleted.
-   We're base64 encoding the value before deletion to ensure
-   that the deletion will work."
-  [cm path attr value]
-  (let [{:keys [attr value unit]} (first (get-attribute-value cm path attr value))
-        new-val (encode-str value)]
-    (add-metadata cm path attr new-val unit)
-    new-val))
 
 (defn- metadata-batch-set
   "Adds and deletes metadata on path for a user. add-dels should be in the
@@ -223,10 +211,13 @@
    performed."
   [user force? src-id dest-ids]
   (with-jargon (icat/jargon-cfg) [cm]
-    (transaction
-      (let [{src-path :src dest-paths :paths :as results} (copy-metadata-template-avus
-                                                            cm user force? src-id dest-ids)
-            irods-avus (list-path-metadata cm src-path)]
+    (let [src-path (:path (uuids/path-for-uuid cm user src-id))
+          dest-paths (set (map #(ft/rm-last-slash (:path %)) (uuids/paths-for-uuids cm user dest-ids)))
+          irods-avus (list-path-metadata cm src-path)
+          attrs (set (map :attr irods-avus))]
+      (if-not force?
+        (validate-batch-add-attrs cm dest-paths attrs))
+      (let [results (copy-metadata-template-avus cm user force? src-id dest-ids)]
         (doseq [path dest-paths]
           (metadata-batch-add-to-path cm path irods-avus))
         results))))
@@ -366,3 +357,126 @@
     (validate-map params {:user string?})))
 
 (with-post-hook! #'do-metadata-save (log-func "do-metadata-save"))
+
+(defn- add-metadata-template-avus
+  "Adds or Updates AVUs associated with a Metadata Template for the given user's data item."
+  [cm user path template-id avus]
+  (validators/path-exists cm path)
+  (validators/path-writeable cm user path)
+  (let [{:keys [id type]} (uuids/uuid-for-path cm user path)
+        data-id (uuidify id)
+        data-type (metadata-client/resolve-data-type type)]
+    (metadata-client/set-metadata-template-avus data-id data-type template-id {:avus avus})))
+
+(defn- bulk-add-file-avus
+  "Applies metadata from a list of attributes and values to the given path.
+   If an AVU's attribute is found in the given template-attrs map, then that AVU is stored in the
+   metadata db; all other AVUs are stored in IRODS."
+  [cm user dest-dir template-id template-attrs attrs path values]
+  (let [avus (map (partial zipmap [:attr :value :unit]) (map vector attrs values (repeat "")))
+        template-attr? #(contains? template-attrs (:attr %))
+        [template-avus irods-avus] ((juxt filter remove) template-attr? avus)]
+    (when-not (empty? template-avus)
+      (add-metadata-template-avus cm user path template-id template-avus))
+    (when-not (empty? irods-avus)
+      (authorized-avus irods-avus)
+      (metadata-batch-add-to-path cm path irods-avus))
+    {:path path
+     :template-avus template-avus
+     :irods-avus irods-avus}))
+
+(defn- parse-template-attrs
+  "Fetches Metadata Template attributes from the metadata service if given a template-id UUID.
+   Returns a map with the attribute names as keys, or nil."
+  [template-id]
+  (when template-id
+    (->> (metadata-client/get-template template-id)
+         :body
+         service/decode-json
+         :attributes
+         (group-by :name))))
+
+(defn- format-csv-metadata-filename
+  [dest-dir ^String filename]
+  (ft/rm-last-slash
+    (if (.startsWith filename "/")
+      filename
+      (ft/path-join dest-dir filename))))
+
+(defn- bulk-add-avus
+  "Applies metadata from a list of attributes and filename/values to those files found under
+   dest-dir."
+  [cm user dest-dir force? template-id template-attrs attrs csv-filename-values]
+  (let [format-path (partial format-csv-metadata-filename dest-dir)
+        paths (map (comp format-path first) csv-filename-values)
+        value-lists (map rest csv-filename-values)
+        irods-attrs (clojure.set/difference (set attrs) (set (keys template-attrs)))]
+    (validators/all-paths-exist cm paths)
+    (validators/all-paths-writeable cm user paths)
+    (if-not force?
+      (validate-batch-add-attrs cm paths irods-attrs))
+  (mapv (partial bulk-add-file-avus cm user dest-dir template-id template-attrs attrs)
+    paths value-lists)))
+
+(defn- parse-metadata-csv
+  "Parses filenames and metadata to apply from a CSV file input stream.
+   If a template-id is provided, then AVUs with template attributes are stored in the metadata db,
+   and all other AVUs are stored in IRODS."
+  [cm user dest-dir force? template-id ^String separator ^InputStream stream]
+  (let [stream-reader (java.io.InputStreamReader. stream "UTF-8")
+        csv (mapv (partial mapv string/trim) (.readAll (CSVReader. stream-reader (.charAt separator 0))))
+        attrs (-> csv first rest)
+        csv-filename-values (rest csv)
+        template-attrs (parse-template-attrs template-id)]
+    {:metadata
+     (bulk-add-avus cm user dest-dir force? template-id template-attrs attrs csv-filename-values)}))
+
+(defn- parse-form-csv-metadata
+  [user dest-dir force? template-id separator {:keys [stream filename content-type]}]
+  (with-jargon (icat/jargon-cfg) [cm]
+    (validators/user-exists cm user)
+    (parse-metadata-csv cm user dest-dir force? template-id separator stream)))
+
+(defn parse-csv-metadata
+  "Parses filenames and metadata to apply from a CSV file posted in a multipart form request"
+  [{{:keys [user]} :user-info
+    {:keys [dest force template-id separator] :or {separator "%2C"}} :params
+    :as req}]
+  (let [parser (partial parse-form-csv-metadata
+                 user dest
+                 (Boolean/parseBoolean force)
+                 (uuidify template-id)
+                 (url/url-decode separator))
+        {{results "file"} :params} (multipart/multipart-params-request req {:store parser})]
+    (service/success-response results)))
+
+(with-pre-hook! #'parse-csv-metadata
+  (fn [{:keys [user-info params] :as req}]
+    (log-call "parse-csv-metadata" req)
+    (validate-map user-info {:user string?})
+    (validate-map params {:dest string?})))
+
+(with-post-hook! #'parse-csv-metadata (log-func "parse-csv-metadata"))
+
+(defn parse-src-file-csv-metadata
+  "Parses filenames and metadata to apply from a source CSV file in the data store"
+  [{:keys [user]} {:keys [src dest force template-id separator] :or {separator "%2C"}}]
+  (with-jargon (icat/jargon-cfg) [cm]
+    (validators/user-exists cm user)
+    (validators/path-exists cm src)
+    (validators/path-readable cm user src)
+    (service/success-response
+      (parse-metadata-csv cm user dest
+        (Boolean/parseBoolean force)
+        (uuidify template-id)
+        (url/url-decode separator)
+        (input-stream cm src)))))
+
+(with-pre-hook! #'parse-src-file-csv-metadata
+  (fn [user-info params]
+    (log-call "parse-src-file-csv-metadata" user-info params)
+    (validate-map user-info {:user string?})
+    (validate-map params {:src string?
+                          :dest string?})))
+
+(with-post-hook! #'parse-src-file-csv-metadata (log-func "parse-src-file-csv-metadata"))

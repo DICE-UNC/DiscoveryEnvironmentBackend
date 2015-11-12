@@ -5,9 +5,15 @@
         [donkey.util])
   (:require [donkey.util.config :as config]))
 
-(defn secured-coge-routes
+(defn coge-routes
   []
   (optional-routes
     [config/coge-enabled]
-    (POST "/coge/load-genomes" [:as {body :body}]
-          (get-genome-viewer-url body))))
+    (GET "/coge/genomes" [:as {:keys [params]}]
+         (success-response (search-genomes params)))
+
+    (POST "/coge/genomes/:genome-id/export-fasta" [genome-id :as {:keys [params]}]
+          (success-response (export-fasta genome-id params)))
+
+    (POST "/coge/genomes/load" [:as {:keys [body]}]
+          (success-response (get-genome-viewer-url body)))))

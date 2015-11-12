@@ -76,8 +76,7 @@
   (-> routes
       req-logger
       jb/parse-json-body
-      wrap-errors
-      (tc/wrap-thread-context svc-info)))
+      wrap-errors))
 
 (defn cli-options
   []
@@ -88,12 +87,12 @@
 
 (defn -main
   [& args]
-  (tc/set-context! svc-info)
-  (let [{:keys [options arguments errors summary]} (ccli/handle-args svc-info args cli-options)]
-    (when-not (fs/exists? (:config options))
-      (ccli/exit 1 (str "The config file does not exist.")))
-    (when-not (fs/readable? (:config options))
-      (ccli/exit 1 "The config file is not readable."))
-    (log/warn (:config options))
-    (cfg/load-config options)
-    (jetty/run-jetty (site-handler jex-routes) {:port (listen-port)})))
+  (tc/with-logging-context svc-info
+    (let [{:keys [options arguments errors summary]} (ccli/handle-args svc-info args cli-options)]
+      (when-not (fs/exists? (:config options))
+        (ccli/exit 1 (str "The config file does not exist.")))
+      (when-not (fs/readable? (:config options))
+        (ccli/exit 1 "The config file is not readable."))
+      (log/warn (:config options))
+      (cfg/load-config options)
+      (jetty/run-jetty (site-handler jex-routes) {:port (listen-port)}))))

@@ -1,7 +1,8 @@
 (ns iplant_groups.routes
-  (:use [clojure-commons.middleware :only [log-validation-errors]]
+  (:use [service-logging.middleware :only [wrap-logging add-user-to-context clean-context]]
         [clojure-commons.query-params :only [wrap-query-params]]
-        [compojure.api.sweet]
+        [compojure.core :only [wrap-routes]]
+        [common-swagger-api.schema]
         [iplant_groups.routes.domain.group]
         [ring.middleware.keyword-params :only [wrap-keyword-params]])
   (:require [iplant_groups.routes.folders :as folder-routes]
@@ -9,9 +10,10 @@
             [iplant_groups.routes.status :as status-routes]
             [iplant_groups.routes.subjects :as subject-routes]
             [iplant_groups.util.config :as config]
-            [service-logging.thread-context :as tc]))
+            [clojure-commons.exception :as cx]))
 
 (defapi app
+  {:exceptions cx/exception-handlers}
   (swagger-ui config/docs-uri)
   (swagger-docs
    {:info {:title       "RESTful Service Facade for Grouper"
@@ -22,13 +24,19 @@
            {:name "service-info", :description "Service Status Information"}
            {:name "subjects", :description "Subject Information"}]})
   (middlewares
-   [wrap-keyword-params
+   [clean-context
+    wrap-keyword-params
     wrap-query-params
-    (tc/wrap-thread-context config/svc-info)
-    log-validation-errors]
+   (wrap-routes wrap-logging)]
    (context* "/" []
     :tags ["service-info"]
-    status-routes/status)
+    status-routes/status))
+  (middlewares
+   [clean-context
+    wrap-keyword-params
+    wrap-query-params
+    add-user-to-context
+    wrap-logging]
    (context* "/folders" []
     :tags ["folders"]
     folder-routes/folders)

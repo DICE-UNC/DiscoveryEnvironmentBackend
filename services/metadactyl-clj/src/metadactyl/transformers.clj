@@ -1,18 +1,6 @@
 (ns metadactyl.transformers
   (:use [clojure.java.io :only [reader]])
-  (:require [cheshire.core :as cheshire]
-            [clojure.tools.logging :as log])
-  (:import [net.sf.json JSONObject]))
-
-(defn object->json-str
-  "Converts a Java object to a JSON string."
-  [obj]
-  (.toString (JSONObject/fromObject obj)))
-
-(defn object->json-obj
-  "Converts a Java object to a JSON object."
-  [obj]
-  (JSONObject/fromObject obj))
+  (:require [cheshire.core :as cheshire]))
 
 (defn add-username-to-json
   "Adds the name of the currently authenticated user to a JSON object in the

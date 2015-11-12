@@ -1,8 +1,9 @@
 (ns metadata.routes
   (:use [clojure-commons.lcase-params :only [wrap-lcase-params]]
-        [clojure-commons.middleware :only [log-validation-errors]]
         [clojure-commons.query-params :only [wrap-query-params]]
-        [compojure.api.sweet])
+        [compojure.core :only [wrap-routes]]
+        [service-logging.middleware :only [wrap-logging add-user-to-context clean-context]]
+        [common-swagger-api.schema])
   (:require [metadata.routes.avus :as avu-routes]
             [metadata.routes.comments :as comment-routes]
             [metadata.routes.favorites :as favorites-routes]
@@ -10,16 +11,11 @@
             [metadata.routes.tags :as tag-routes]
             [metadata.routes.templates :as template-routes]
             [metadata.util.config :as config]
-            [metadata.util.service :as service]
             [ring.middleware.keyword-params :as params]
-            [schema.core :as s]
-            [service-logging.thread-context :as tc]))
-
-(defn context-middleware
-  [handler]
-  (tc/wrap-thread-context handler config/svc-info))
+            [clojure-commons.exception :as cx]))
 
 (defapi app
+  {:exceptions cx/exception-handlers}
   (swagger-ui config/docs-uri)
   (swagger-docs
     {:info {:title "Discovery Environment Metadata API"
@@ -36,13 +32,12 @@
             {:name "template-info", :description "Template Information"}
             {:name "template-administration", :description "Template Administration"}]})
   (middlewares
-    [tc/add-user-to-context
+    [clean-context
      wrap-query-params
      wrap-lcase-params
      params/wrap-keyword-params
-     service/req-logger
-     context-middleware
-     log-validation-errors]
+     add-user-to-context
+     wrap-logging]
     status-routes/status
     avu-routes/avus
     comment-routes/data-comment-routes
