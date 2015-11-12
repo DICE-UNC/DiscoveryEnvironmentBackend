@@ -1,17 +1,14 @@
 (ns metadata.services.comments
   (:use [slingshot.slingshot :only [try+ throw+]])
-  (:require [clojure.string :as str]
-            [clojure.tools.logging :as log]
-            [clojure-commons.error-codes :as err]
-            [clojure-commons.validators :as validators]
-            [metadata.persistence.comments :as db]
-            [metadata.util.service :as service]))
+  (:require [metadata.persistence.comments :as db]))
 
 
 (defn- validate-comment-id
   [data-id comment-id]
   (when-not (db/comment-on? comment-id data-id)
-    (throw+ {:error_code err/ERR_NOT_FOUND})))
+    (throw+ {:type       :clojure-commons.exception/not-found
+             :comment-id comment-id
+             :target-id  data-id})))
 
 (defn- prepare-comment
   [comment]
@@ -55,34 +52,33 @@
   (add-comment user app-id "app" comment))
 
 (defn list-comments
-  [target-id]
   "Returns a list of comments attached to a given target ID.
 
    Parameters:
      target-id - the UUID corresponding to the data item being inspected"
+  [target-id]
    (let [comments (map prepare-comment (db/select-all-comments target-id))]
      {:comments comments}))
 
 (defn list-data-comments
-  [data-id]
   "Returns a list of comments attached to a given data item.
 
    Parameters:
      data-id - the `data-id` from the request. This should be the UUID corresponding to the data item
                 being inspected"
+  [data-id]
   (list-comments data-id))
 
 (defn list-app-comments
-  [app-id]
   "Returns a list of comments attached to a given App ID.
 
    Parameters:
      app-id - the `app-id` from the request. This should be the UUID corresponding to the App being
               inspected"
+  [app-id]
   (list-comments app-id))
 
 (defn update-retract-status
-  [user target-uuid comment-id retracting? target-admin?]
   "Changes the retraction status for a given comment.
 
    Parameters:
@@ -91,19 +87,21 @@
      comment-id - the UUID corresponding to the comment being modified
      retracting? - Whether the user wants to retract the comment (should be a Boolean)
      target-admin? - Whether the user is considered an admin of the target (owner or admin user)."
+  [user target-uuid comment-id retracting? target-admin?]
   (validate-comment-id target-uuid comment-id)
   (let [comment (db/select-comment comment-id)]
     (if retracting?
       (if (or target-admin? (= user (:commenter comment)))
         (db/retract-comment comment-id user)
-        (throw+ {:error_code err/ERR_NOT_OWNER :reason "doesn't own comment"}))
+        (throw+ {:type  :clojure-commons.exception/not-owner
+                 :error "doesn't own comment"}))
       (if (= user (:retracted_by comment))
         (db/readmit-comment comment-id)
-        (throw+ {:error_code err/ERR_NOT_OWNER :reason "wasn't retractor"})))
+        (throw+ {:type  :clojure-commons.exception/not-owner
+                 :error "wasn't retractor"})))
     nil))
 
 (defn update-data-retract-status
-  [user data-id comment-id retracted]
   "Changes the retraction status for a given comment.
 
    Parameters:
@@ -113,10 +111,10 @@
      comment-id - the comment-id from the request. This should be the UUID corresponding to the
                   comment being modified
      retracted - the `retracted` query parameter. This should be a Boolean."
+  [user data-id comment-id retracted]
   (update-retract-status user data-id comment-id retracted false))
 
 (defn update-app-retract-status
-  [user app-id comment-id retracted]
   "Changes the retraction status for a given comment.
 
    Parameters:
@@ -125,6 +123,7 @@
      comment-id - the comment-id from the request. This should be the UUID corresponding to the
                   comment being modified
      retracted - the `retracted` query parameter. This should be a Boolean."
+  [user app-id comment-id retracted]
   (update-retract-status user app-id comment-id retracted false))
 
 (defn admin-update-retract-status

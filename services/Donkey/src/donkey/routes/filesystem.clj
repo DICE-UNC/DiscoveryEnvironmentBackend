@@ -1,15 +1,9 @@
 (ns donkey.routes.filesystem
   (:use [compojure.core]
-        [donkey.auth.user-attributes]
-        [donkey.util.validators :only [parse-body]]
-        [donkey.util.transformers :only [add-current-user-to-map]]
-        [donkey.util]
-        [slingshot.slingshot :only [try+ throw+]])
+        [donkey.util])
   (:require [donkey.util.config :as config]
             [clojure.tools.logging :as log]
-            [dire.core :refer [with-pre-hook!]]
             [donkey.clients.data-info :as data]
-            [donkey.services.filesystem.create :as create]
             [donkey.services.filesystem.directory :as dir]
             [donkey.services.filesystem.exists :as exists]
             [donkey.services.filesystem.home :as home]
@@ -17,18 +11,11 @@
             [donkey.services.filesystem.metadata :as meta]
             [donkey.services.filesystem.metadata-template-avus :as mta]
             [donkey.services.filesystem.metadata-templates :as mt]
-            [donkey.services.filesystem.move :as move]
-            [donkey.services.filesystem.page-csv :as csv]
-            [donkey.services.filesystem.page-file :as file]
             [donkey.services.filesystem.root :as root]
             [donkey.services.filesystem.sharing :as sharing]
             [donkey.services.filesystem.stat :as stat]
             [donkey.services.filesystem.tickets :as ticket]
-            [donkey.services.filesystem.trash :as trash]
-            [donkey.services.filesystem.updown :as ud]
-            [donkey.services.filesystem.users :as user]
-            [donkey.services.filesystem.uuids :as uuid]))
-
+            [donkey.services.filesystem.updown :as ud]))
 
 (defn secured-filesystem-routes
   "The routes for file IO endpoints."
@@ -67,13 +54,13 @@
       (controller req data/rename :params :body))
 
     (POST "/filesystem/delete" [:as req]
-      (controller req trash/do-delete :params :body))
+      (controller req data/delete-paths :params :body))
 
     (POST "/filesystem/delete-contents" [:as req]
-      (controller req trash/do-delete-contents :params :body))
+      (controller req data/delete-contents :params :body))
 
     (POST "/filesystem/move" [:as req]
-      (controller req move/do-move :params :body))
+      (controller req data/move :params :body))
 
     (POST "/filesystem/move-contents" [:as req]
       (controller req data/move-contents :params :body))
@@ -112,13 +99,13 @@
       (controller req sharing/do-unshare :params :body))
 
     (POST "/filesystem/user-permissions" [:as req]
-      (controller req user/do-user-permissions :params :body))
+      (controller req data/collect-permissions :params :body))
 
     (POST "/filesystem/restore" [:as req]
-      (controller req trash/do-restore :params :body))
+      (controller req data/restore-files :params :body))
 
     (POST "/filesystem/restore-all" [:as req]
-      (controller req trash/do-restore-all :params))
+      (controller req data/restore-files :params))
 
     (POST "/filesystem/tickets" [:as req]
       (controller req ticket/do-add-tickets :params :body))
@@ -130,13 +117,13 @@
       (controller req ticket/do-list-tickets :params :body))
 
     (DELETE "/filesystem/trash" [:as req]
-      (controller req trash/do-delete-trash :params))
+      (controller req data/delete-trash :params))
 
     (POST "/filesystem/read-chunk" [:as req]
-      (controller req file/do-read-chunk :params :body))
+      (controller req data/read-chunk :params :body))
 
     (POST "/filesystem/read-csv-chunk" [:as req]
-      (controller req csv/do-read-csv-chunk :params :body))
+      (controller req data/read-tabular-chunk :params :body))
 
     (POST "/filesystem/anon-files" [:as req]
       (controller req sharing/do-anon-files :params :body))))
@@ -147,6 +134,12 @@
   (optional-routes
    [#(and (config/filesystem-routes-enabled)
           (config/metadata-routes-enabled))]
+
+    (POST "/filesystem/metadata/csv-form-parser" [dest :as req]
+      (meta/parse-csv-metadata req))
+
+    (POST "/filesystem/metadata/csv-parser" [:as {:keys [user-info params] :as req}]
+      (meta/parse-src-file-csv-metadata user-info params))
 
    (POST "/filesystem/:data-id/metadata/copy" [data-id force :as req]
      (controller req meta/do-metadata-copy :params data-id force :body))

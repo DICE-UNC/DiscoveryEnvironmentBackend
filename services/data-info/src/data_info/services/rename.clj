@@ -1,6 +1,5 @@
 (ns data-info.services.rename
   (:use [clojure-commons.error-codes]
-        [clojure-commons.validators]
         [clj-jargon.init :only [with-jargon]]
         [clj-jargon.item-ops :only [move move-all]]
         [slingshot.slingshot :only [try+ throw+]])
@@ -84,7 +83,11 @@
 
 (defn do-move-uuid
   [{user :user} {dest-dir :dirname} source-uuid]
-  (rename-uuid user source-uuid dest-dir))
+  (move-uuid user source-uuid dest-dir))
+
+(defn do-move
+  [{user :user} {sources :sources dest :dest}]
+  (move-paths user sources dest))
 
 (defn- move-uuid-contents
   "Rename by UUID: given a user, a source directory UUID, and a new directory, move the directory contents, retaining the filename."
@@ -125,3 +128,13 @@
     (when (paths/super-user? (:user params))
       (throw+ {:error_code ERR_NOT_AUTHORIZED
                :user       (:user params)}))))
+
+(with-pre-hook! #'do-move
+  (fn [params body]
+    (dul/log-call "do-move" params body)
+    (when (paths/super-user? (:user params))
+      (throw+ {:error_code ERR_NOT_AUTHORIZED
+               :user (:user params)}))
+    (validators/validate-num-paths-under-paths (:user params) (:sources body))))
+
+(with-post-hook! #'do-move (dul/log-func "do-move"))

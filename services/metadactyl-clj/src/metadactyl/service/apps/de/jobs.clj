@@ -2,14 +2,13 @@
   (:use [clojure-commons.file-utils :only [build-result-folder-path]]
         [kameleon.jobs :only [get-job-type-id save-job save-job-step]]
         [kameleon.queries :only [get-user-id]]
+        [korma.core :only [sqlfn]]
+        [korma.db :only [transaction]]
         [medley.core :only [dissoc-in]]
         [metadactyl.util.conversions :only [remove-nil-vals]]
-        [korma.core]
-        [korma.db :only [transaction]]
         [slingshot.slingshot :only [try+ throw+]])
   (:require [cheshire.core :as cheshire]
             [clojure.tools.logging :as log]
-            [clojure-commons.error-codes :as ce]
             [kameleon.db :as db]
             [metadactyl.clients.jex :as jex]
             [metadactyl.clients.jex-events :as jex-events]
@@ -40,7 +39,8 @@
    (jex/submit-job (pre-process-jex-submission job))
    (catch Object _
      (log/error (:throwable &throw-context) "job submission failed")
-     (throw+ {:error_code ce/ERR_REQUEST_FAILED}))))
+     (throw+ {:type  :clojure-commons.exception/request-failed
+              :error "job submission failed"}))))
 
 (defn- store-submitted-job
   "Saves information about a job in the database."

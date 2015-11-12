@@ -52,7 +52,7 @@
                      :socket-timeout timeout})))
 
 (defn get-access-token-for-credentials
-  [oauth-info username password & {:keys [timeout] or {timeout 5000}}]
+  [oauth-info username password & {:keys [timeout] :or {timeout 5000}}]
   (->> (credentials-token-request oauth-info username password timeout)
        (format-token-info)
        (merge oauth-info)
@@ -111,7 +111,7 @@
 (defn token-expiring?
   ([{:keys [refresh-window] :or {refresh-window default-refresh-window} :as token-info}]
      (token-expiring? token-info refresh-window))
-  ([{:keys [expires-at]} window]
+  ([{:keys [^Timestamp expires-at]} window]
      (let [last-valid-time (Timestamp. (+ (System/currentTimeMillis) window))]
        (neg? (.compareTo expires-at last-valid-time)))))
 

@@ -8,12 +8,16 @@
                                   container-volumes-from
                                   data-containers]]
         [kameleon.uuids :only [uuidify]]
-        [korma.core]
+        [korma.core :exclude [update]]
         [korma.db :only [transaction]]
-        [metadactyl.persistence.app-metadata :only [update-tool]]
+        [metadactyl.persistence.app-metadata :only [get-public-tools-by-image-id
+                                                    get-tools-by-image-id
+                                                    update-tool]]
         [metadactyl.util.assertions :only [assert-not-nil]]
-        [metadactyl.util.conversions :only [remove-nil-vals remove-empty-vals]])
-  (:require [clojure.tools.logging :as log]))
+        [metadactyl.util.conversions :only [remove-nil-vals remove-empty-vals]]
+        [metadactyl.validation :only [validate-image-not-public validate-image-not-used]])
+  (:require [clojure.tools.logging :as log]
+            [korma.core :as sql]))
 
 (defn containerized?
   "Returns true if the tool is available in a container."
@@ -40,6 +44,11 @@
   {:container_images
     (select container-images
       (fields :name :tag :url :id))})
+
+(defn image-public-tools
+  [id]
+  (assert-not-nil [:image_id id] (image-info id))
+  {:tools (map remove-nil-vals (get-public-tools-by-image-id id))})
 
 (defn tool-image-info
   "Returns a map containing information about a container image. Info is looked up by the tool UUID"
@@ -94,38 +103,25 @@
 (defn modify-image-info
   "Updates the record for a container image. Basically, just allows you to set a new URL
    at this point."
-  [image-id update-map]
-  (let [umap (select-keys update-map [:name :tag :url])]
-    (when-not (empty? umap)
-      (update container-images
-        (set-fields umap)
-        (where (= :id (uuidify image-id))))
+  [image-id user overwrite-public image-info]
+  (let [update-info (select-keys image-info [:name :tag :url])]
+    (when-not (empty? update-info)
+      (when-not overwrite-public
+        (validate-image-not-public image-id))
+      (log/warn user "updating image" image-id image-info)
+      (sql/update container-images
+        (set-fields update-info)
+        (where (= :id (uuidify image-id)))))
+    (first
       (select container-images
         (where (= :id (uuidify image-id)))))))
 
 (defn delete-image
-  [image-id]
-  (when (image-id image-id)
-    (transaction
-      (update tools
-        (set-fields {:container_images_id nil})
-        (where {:container_images_id (uuidify image-id)}))
-      (delete container-images
-        (where (= :id (uuidify image-id)))))))
-
-(defn delete-image-info
-  "Deletes a record for an image"
-  [image-map]
-  (when (image? image-map)
-    (let [tag  (get-tag image-map)
-          name (:name image-map)]
-      (transaction
-       (update tools
-               (set-fields {:container_images_id nil})
-               (where {:container_images_id (image-id image-map)}))
-       (delete container-images
-               (where (and (= :name name)
-                           (= :tag tag))))))))
+  [id user]
+  (validate-image-not-used id)
+  (log/warn user "deleting image" id)
+  (delete container-images (where {:id id}))
+  nil)
 
 (defn devices
   "Returns the devices associated with the given container_setting uuid."
@@ -180,9 +176,9 @@
   [settings-uuid device-uuid update-map]
   (if-not (device? device-uuid)
     (throw (Exception. (str "device does not exist: " device-uuid))))
-  (update container-devices
-          (set-fields (select-keys update-map [:host_path :container_path :container_settings_id]))
-          (where {:id (uuidify device-uuid)})))
+  (sql/update container-devices
+    (set-fields (select-keys update-map [:host_path :container_path :container_settings_id]))
+    (where {:id (uuidify device-uuid)})))
 
 (defn delete-device
   [device-uuid]
@@ -244,10 +240,10 @@
   [settings-uuid volume-uuid volume-map]
   (if-not (volume? volume-uuid)
     (throw (Exception. (str "volume does not exist: " volume-uuid))))
-  (update container-volumes
-          (set-fields (merge {:container_settings_id (uuidify settings-uuid)}
-                             (select-keys volume-map [:host_path :container_path])))
-          (where {:id (uuidify volume-uuid)})))
+  (sql/update container-volumes
+    (set-fields (merge {:container_settings_id (uuidify settings-uuid)}
+                       (select-keys volume-map [:host_path :container_path])))
+    (where {:id (uuidify volume-uuid)})))
 
 (defn delete-volume
   "Deletes the volume associated with uuid in the container_volumes table."
@@ -290,9 +286,9 @@
                      (assoc :container_images_id container-images-id)
                      remove-nil-vals)]
         (when-not (empty? umap)
-          (update data-containers
-                  (set-fields umap)
-                  (where {:id data-container-id})))
+          (sql/update data-containers
+            (set-fields umap)
+            (where {:id data-container-id})))
         (data-container data-container-id)))))
 
 (defn- find-data-container-id
@@ -401,9 +397,9 @@
   (if-not (settings? settings-uuid)
     (throw (Exception. (str "Container settings do not exist for UUID: " settings-uuid))))
   (let [values (filter-container-settings settings-map)]
-    (update container-settings
-            (set-fields values)
-            (where {:id (uuidify settings-uuid)}))))
+    (sql/update container-settings
+      (set-fields values)
+      (where {:id (uuidify settings-uuid)}))))
 
 (defn tool-settings
   "Returns the top-level settings for the tool container."
@@ -439,27 +435,18 @@
            (merge {:image (tool-image-info tool-uuid)})
            filter-returns))))
 
-(defn update-settings-field
-  [tool-uuid field-kw new-value]
-  (let [id (uuidify tool-uuid)]
-    (when (tool-has-settings? id)
-      (let [settings-id (tool-settings-uuid id)]
-        (select-keys (modify-settings settings-id {field-kw new-value}) [field-kw])))))
-
-(defn update-device-field
-  [tool-uuid device-uuid field-kw new-value]
-  (let [id (uuidify tool-uuid)]
-    (when (tool-has-settings? id)
-      (let [settings-id (tool-settings-uuid id)]
-        (when (and (device? device-uuid)
-                   (settings-has-device? settings-id device-uuid))
-          (select-keys (modify-device settings-id device-uuid {field-kw new-value}) [field-kw]))))))
-
 (defn get-settings-field
   [tool-uuid field-kw]
   (when (tool-has-settings? tool-uuid)
     (let [settings (tool-settings tool-uuid)]
       {field-kw (field-kw settings)})))
+
+(defn update-settings-field
+  [tool-id field-kw new-value]
+  (when (tool-has-settings? tool-id)
+    (let [settings-id (tool-settings-uuid tool-id)]
+      (modify-settings settings-id {field-kw new-value})
+      (get-settings-field tool-id field-kw))))
 
 (defn tool-device-info
   "Returns a container's device information based on the tool UUID."
@@ -492,14 +479,14 @@
   (let [fields (tool-device tool-uuid device-uuid)]
     (or (select-keys fields [field-kw]) nil)))
 
-(defn update-volume-field
-  [tool-uuid volume-uuid field-kw new-value]
-  (let [id (uuidify tool-uuid)]
-    (when (tool-has-settings? id)
-      (let [settings-id (tool-settings-uuid id)]
-        (when (and (volume? volume-uuid)
-                   (settings-has-volume? settings-id volume-uuid))
-          (select-keys (modify-volume settings-id volume-uuid {field-kw new-value}) [field-kw]))))))
+(defn update-device-field
+  [tool-id device-id field-kw new-value]
+  (when (tool-has-settings? tool-id)
+    (let [settings-id (tool-settings-uuid tool-id)]
+      (when (and (device? device-id)
+                 (settings-has-device? settings-id device-id))
+        (modify-device settings-id device-id {field-kw new-value})
+        (device-field tool-id device-id field-kw)))))
 
 (defn tool-volume
   "Returns a map with info about a particular volume associated with the tool's container."
@@ -524,6 +511,15 @@
   [tool-uuid volume-uuid field-kw]
   (let [fields (tool-volume tool-uuid volume-uuid)]
     (or (select-keys fields [field-kw]) nil)))
+
+(defn update-volume-field
+  [tool-id volume-id field-kw new-value]
+  (when (tool-has-settings? tool-id)
+    (let [settings-id (tool-settings-uuid tool-id)]
+      (when (and (volume? volume-id)
+                 (settings-has-volume? settings-id volume-id))
+        (modify-volume settings-id volume-id {field-kw new-value})
+        (volume-field tool-id volume-id field-kw)))))
 
 (defn tool-volumes-from
   "Returns a map with info about a particular container from which the tool's container will mount volumes."
