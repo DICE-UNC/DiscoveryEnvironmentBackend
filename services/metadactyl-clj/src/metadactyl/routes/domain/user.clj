@@ -1,8 +1,8 @@
 (ns metadactyl.routes.domain.user
-  (:use [metadactyl.routes.params :only [SecuredQueryParams]]
-        [ring.swagger.schema :only [describe]]
+  (:use [common-swagger-api.schema :only [describe]]
+        [metadactyl.routes.params :only [SecuredQueryParams]]
         [schema.core :only [defschema]])
-  (:import [java.util Date UUID]))
+  (:import [java.util UUID]))
 
 (defschema User
   {:id       (describe UUID "The DE's internal user identifier")

@@ -28,6 +28,7 @@
                  [com.cemerick/url "0.1.1" :exclusions [com.cemerick/clojurescript.test]]
                  [commons-net "3.3"]                               ; provides org.apache.commons.net
                  [compojure "1.4.0"]
+                 [metosin/compojure-api "0.23.1"]
                  [de.ubercode.clostache/clostache "1.4.0" :exclusions [org.clojure/core.incubator]]
                  [dire "0.5.3"]
                  [me.raynes/fs "1.4.6"]
@@ -57,9 +58,7 @@
          :port 31325
          :auto-reload? false}
   :uberjar-exclusions [#".*[.]SF" #"LICENSE" #"NOTICE"]
-  :repositories [["sonatype-nexus-snapshots"
-                  {:url "https://oss.sonatype.org/content/repositories/snapshots"}]
-                 ["biojava"
+  :repositories [["biojava"
                   {:url "http://www.biojava.org/download/maven"}]
                  ["nexml"
                   {:url "http://nexml-dev.nescent.org/.m2/repository"

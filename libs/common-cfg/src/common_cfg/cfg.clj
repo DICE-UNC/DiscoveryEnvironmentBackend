@@ -2,7 +2,6 @@
   (:use [medley.core])
   (:require [clojure.edn :as edn]
             [bouncer [core :as b] [validators :as v]]
-            [filevents.core :refer [watch]]
             [clojure.java.io :refer [reader]]
             [me.raynes.fs :as fs]
             [clojure.tools.logging :as log]
@@ -92,7 +91,7 @@
   (edn/read-string (slurp (fs/normalized (fs/expand-home cfg-path)))))
 
 (defn load-cfg-file
-  [cfg-path]
+  [^String cfg-path]
   (cond
    (.endsWith cfg-path ".properties")
    (load-properties cfg-path)

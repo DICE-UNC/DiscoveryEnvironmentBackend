@@ -32,3 +32,4 @@ node_modules/
 services/*/*-build
 *.rpm
 *.tar.gz
+*.log

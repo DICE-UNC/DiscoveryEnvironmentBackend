@@ -2,9 +2,10 @@
   (:gen-class)
   (:use [clojure.java.io :only [file]]
         [clojure-commons.lcase-params :only [wrap-lcase-params]]
-        [clojure-commons.middleware :only [wrap-log-requests]]
         [clojure-commons.query-params :only [wrap-query-params]]
+        [service-logging.middleware :only [wrap-logging clean-context]]
         [compojure.core]
+        [compojure.api.middleware :only [wrap-exceptions]]
         [ring.middleware.keyword-params]
         [donkey.routes.admin]
         [donkey.routes.callbacks]
@@ -29,6 +30,8 @@
         [donkey.util.service]
         [slingshot.slingshot :only [try+ throw+]])
   (:require [compojure.route :as route]
+            [cheshire.core :as cheshire]
+            [clojure-commons.exception :as cx]
             [ring.adapter.jetty :as jetty]
             [donkey.util.config :as config]
             [clojure.tools.nrepl.server :as nrepl]
@@ -37,8 +40,8 @@
             [donkey.services.filesystem.icat :as icat]
             [donkey.util :as util]
             [donkey.util.transformers :as transform]
+            [clojure.tools.logging :as log]
             [service-logging.thread-context :as tc]))
-
 
 (defn delayed-handler
   [routes-fn]
@@ -46,120 +49,15 @@
     (let [handler ((memoize routes-fn))]
       (handler req))))
 
-(defn secured-routes-no-context
-  []
-  (util/flagged-routes
-    (app-category-routes)
-    (apps-routes)
-    (app-comment-routes)
-    (analysis-routes)
-    (reference-genomes-routes)
-    (tool-routes)
-    (route/not-found (unrecognized-path-response))))
-
-
-(defn secured-routes
-  []
-  (util/flagged-routes
-    (secured-notification-routes)
-    (secured-metadata-routes)
-    (secured-pref-routes)
-    (secured-collaborator-routes)
-    (secured-user-info-routes)
-    (secured-tree-viewer-routes)
-    (secured-data-routes)
-    (secured-session-routes)
-    (secured-fileio-routes)
-    (secured-filesystem-routes)
-    (secured-filesystem-metadata-routes)
-    (secured-coge-routes)
-    (secured-search-routes)
-    (secured-oauth-routes)
-    (secured-favorites-routes)
-    (secured-tag-routes)
-    (data-comment-routes)
-    (route/not-found (unrecognized-path-response))))
-
-
-(defn admin-routes
-  []
-  (util/flagged-routes
-    (secured-admin-routes)
-    (admin-data-comment-routes)
-    (admin-category-routes)
-    (admin-apps-routes)
-    (admin-app-comment-routes)
-    (admin-filesystem-metadata-routes)
-    (admin-notification-routes)
-    (admin-reference-genomes-routes)
-    (admin-tool-routes)
-    (route/not-found (unrecognized-path-response))))
-
-(defn cas-store-user
-  [routes]
-  (let [f (if (System/getenv "IPLANT_CAS_FAKE") fake-store-current-user store-current-user)]
-    (f routes
-       config/cas-server
-       config/server-name
-       config/pgt-callback-base
-       config/pgt-callback-path)))
-
-(defn cas-store-admin-user
-  [routes]
-  (let [f (if (System/getenv "IPLANT_CAS_FAKE") fake-store-current-user store-current-admin-user)]
-    (f routes
-      config/cas-server
-      config/server-name
-      config/group-attr-name
-      config/get-allowed-groups
-      config/pgt-callback-base
-      config/pgt-callback-path)))
-
-
 (defn- wrap-user-info
   [handler]
   (fn [request]
-    (let [user-info (transform/add-current-user-to-map {})
-          request   (assoc request :user-info user-info)]
-      (tc/set-context! user-info)
-      (handler request))))
-
-
-(def secured-handler-no-context
-  (-> (delayed-handler secured-routes-no-context)
-    util/trap-handler
-    wrap-log-requests
-    wrap-user-info
-    (cas-store-user)))
-
-
-(def secured-handler
-  (-> (delayed-handler secured-routes)
-    util/trap-handler
-    wrap-log-requests
-    wrap-user-info
-    (cas-store-user)))
-
-
-(def admin-handler
-  (-> (delayed-handler admin-routes)
-    util/trap-handler
-    wrap-log-requests
-    wrap-user-info
-    (cas-store-admin-user)))
-
-
-(defn donkey-routes
-  []
-  (util/flagged-routes
-    (unsecured-misc-routes)
-    (unsecured-notification-routes)
-    (unsecured-tree-viewer-routes)
-    (unsecured-callback-routes)
-    (context "/admin" [] admin-handler)
-    (context "/secured" [] secured-handler)
-    secured-handler-no-context))
-
+    (let [user-info (transform/add-current-user-to-map {})]
+         (log/log 'AccessLogger :trace nil "entering wrap-user-info")
+      (if (nil? (:user user-info))
+        (handler request)
+        (tc/with-logging-context {:user-info (cheshire/encode user-info)}
+                                 (handler request))))))
 
 (defn- start-nrepl
   []
@@ -230,26 +128,116 @@
    :art-id "donkey"
    :service "donkey"})
 
+(defn secured-routes-no-context
+  []
+  (util/flagged-routes
+    (app-category-routes)
+    (apps-routes)
+    (app-comment-routes)
+    (analysis-routes)
+    (coge-routes)
+    (reference-genomes-routes)
+    (tool-routes)
+    (route/not-found (unrecognized-path-response))))
+
+(defn secured-routes
+  []
+  (util/flagged-routes
+    (secured-notification-routes)
+    (secured-metadata-routes)
+    (secured-pref-routes)
+    (secured-collaborator-routes)
+    (secured-user-info-routes)
+    (secured-tree-viewer-routes)
+    (secured-data-routes)
+    (secured-session-routes)
+    (secured-fileio-routes)
+    (secured-filesystem-routes)
+    (secured-filesystem-metadata-routes)
+    (secured-search-routes)
+    (secured-oauth-routes)
+    (secured-favorites-routes)
+    (secured-tag-routes)
+    (data-comment-routes)
+    (route/not-found (unrecognized-path-response))))
+
+(defn admin-routes
+  []
+  (util/flagged-routes
+    (secured-admin-routes)
+    (admin-data-comment-routes)
+    (admin-category-routes)
+    (admin-apps-routes)
+    (admin-app-comment-routes)
+    (admin-filesystem-metadata-routes)
+    (admin-notification-routes)
+    (admin-reference-genomes-routes)
+    (admin-tool-routes)
+    (route/not-found (unrecognized-path-response))))
+
+(defn unsecured-routes
+  []
+  (util/flagged-routes
+    (unsecured-misc-routes)
+    (unsecured-notification-routes)
+    (unsecured-tree-viewer-routes)
+    (unsecured-callback-routes)))
+
+(def admin-handler
+  (-> (delayed-handler admin-routes)
+      (wrap-routes authenticate-current-user)
+      (wrap-routes wrap-user-info)
+      (wrap-routes validate-current-user)
+      (wrap-routes wrap-exceptions  cx/exception-handlers)
+      (wrap-routes wrap-logging)))
+
+(def secured-routes-handler
+  (-> (delayed-handler secured-routes)
+      (wrap-routes authenticate-current-user)
+      (wrap-routes wrap-user-info)
+      (wrap-routes wrap-exceptions  cx/exception-handlers)
+      (wrap-routes wrap-logging)))
+
+(def secured-routes-no-context-handler
+  (-> (delayed-handler secured-routes-no-context)
+      (wrap-routes authenticate-current-user)
+      (wrap-routes wrap-user-info)
+      (wrap-routes wrap-exceptions  cx/exception-handlers)
+      (wrap-routes wrap-logging)))
+
+(def unsecured-routes-handler
+  (-> (delayed-handler unsecured-routes)
+      (wrap-routes wrap-exceptions cx/exception-handlers)
+      (wrap-routes wrap-logging)))
+
+(defn donkey-routes
+  []
+  (util/flagged-routes
+    unsecured-routes-handler
+    (context "/admin" [] admin-handler)
+    (context "/secured" [] secured-routes-handler)
+    secured-routes-no-context-handler))
+
 (defn site-handler
   [routes-fn]
   (-> (delayed-handler routes-fn)
-    wrap-keyword-params
-    wrap-lcase-params
-    wrap-query-params
-    (tc/wrap-thread-context svc-info)))
+      wrap-keyword-params
+      wrap-lcase-params
+      wrap-query-params
+      clean-context))
 
 (def app
   (site-handler donkey-routes))
 
 (defn -main
   [& args]
-  (tc/set-context! svc-info)
-  (let [{:keys [options]} (ccli/handle-args svc-info args cli-options)]
-    ;; comment this is a destructuring...see http://blog.jayfields.com/2010/07/clojure-destructuring.html - options will contain the keys of the command line options
-    (when-not (fs/exists? (:config options))
-      (ccli/exit 1 (str "The config file does not exist.")))
-    (when-not (fs/readable? (:config options))
-      (ccli/exit 1 "The config file is not readable."))
-    (config/load-config-from-file (:config options))
-    (icat/configure-icat)
-    (jetty/run-jetty app {:port (config/listen-port)})))
+
+  (tc/with-logging-context svc-info
+    (let [{:keys [options]} (ccli/handle-args svc-info args cli-options)]
+      (when-not (fs/exists? (:config options))
+        (ccli/exit 1 (str "The config file does not exist.")))
+      (when-not (fs/readable? (:config options))
+        (ccli/exit 1 "The config file is not readable."))
+      (config/load-config-from-file (:config options))
+      (icat/configure-icat)
+      (jetty/run-jetty app {:port (config/listen-port)}))))

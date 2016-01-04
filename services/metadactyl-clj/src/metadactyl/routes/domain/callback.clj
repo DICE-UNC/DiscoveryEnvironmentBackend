@@ -1,7 +1,6 @@
 (ns metadactyl.routes.domain.callback
-  (:use [compojure.api.sweet :only [describe]]
-        [schema.core :only [defschema optional-key]])
-  (:import [java.util UUID]))
+  (:use [common-swagger-api.schema :only [describe]]
+        [schema.core :only [defschema optional-key]]))
 
 (defschema DeJobState
   {:status

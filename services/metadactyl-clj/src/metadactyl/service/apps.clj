@@ -1,10 +1,10 @@
 (ns metadactyl.service.apps
   (:use [kameleon.uuids :only [uuidify]]
         [korma.db :only [transaction]]
-        [slingshot.slingshot :only [try+ throw+]])
+        [slingshot.slingshot :only [try+ throw+]]
+        [service-logging.thread-context :only [with-logging-context]])
   (:require [cemerick.url :as curl]
             [clojure.tools.logging :as log]
-            [clojure-commons.error-codes :as ce]
             [mescal.de :as agave]
             [metadactyl.clients.notifications :as cn]
             [metadactyl.persistence.jobs :as jp]
@@ -17,7 +17,6 @@
             [metadactyl.user :as user]
             [metadactyl.util.config :as config]
             [metadactyl.util.json :as json-util]
-            [metadactyl.util.service :as service]
             [service-logging.thread-context :as tc]))
 
 (defn- authorization-uri
@@ -30,8 +29,8 @@
 
 (defn- authorization-redirect
   [server-info username state-info]
-  (throw+ {:error_code ce/ERR_TEMPORARILY_MOVED
-           :location   (authorization-uri server-info username state-info)}))
+  (throw+ {:type     :clojure-commons.exception/temporary-redirect
+           :location (authorization-uri server-info username state-info)}))
 
 (defn- has-access-token
   [{:keys [api-name] :as server-info} username]
@@ -236,24 +235,24 @@
 
 (defn- sync-job-status
   [{:keys [username id] :as job}]
-  (try+
-   (log/info "synchronizing the job status for" id)
-   (transaction (jobs/sync-job-status (get-apps-client-for-username username) job))
-   (catch Object _
-     (log/error (:throwable &throw-context) "unable to sync the job status for job" id))))
+  (with-logging-context {}
+    (try+
+      (log/info "synchronizing the job status for" id)
+      (transaction (jobs/sync-job-status (get-apps-client-for-username username) job))
+      (catch Object _
+        (log/error (:throwable &throw-context) "unable to sync the job status for job" id)))))
 
 (defn sync-job-statuses
   []
-  (try+
-   (tc/set-context! @logging-context-map)
-   (log/info "synchronizing job statuses")
-   (dorun (map sync-job-status (jp/list-incomplete-jobs)))
-   (catch Object _
-     (log/error (:throwable &throw-context)
-                "error while obtaining the list of jobs to synchronize."))
-   (finally
-     (log/info "done synchronizing job statuses")
-     (tc/clear-context!))))
+  (tc/with-logging-context @logging-context-map
+    (try+
+      (log/info "synchronizing job statuses")
+      (dorun (map sync-job-status (jp/list-incomplete-jobs)))
+      (catch Object _
+        (log/error (:throwable &throw-context)
+                   "error while obtaining the list of jobs to synchronize."))
+      (finally
+        (log/info "done synchronizing job statuses")))))
 
 (defn update-job
   [user job-id body]

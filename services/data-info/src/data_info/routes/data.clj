@@ -1,5 +1,5 @@
 (ns data-info.routes.data
-  (:use [compojure.api.sweet]
+  (:use [common-swagger-api.schema]
         [data-info.routes.domain.common]
         [data-info.routes.domain.data]
         [data-info.routes.domain.stats])
@@ -7,10 +7,24 @@
             [data-info.services.rename :as rename]
             [data-info.services.metadata :as meta]
             [data-info.services.entry :as entry]
+            [data-info.services.page-file :as page-file]
+            [data-info.services.page-tabular :as page-tabular]
             [clojure-commons.error-codes :as ce]
-            [data-info.util.service :as svc]))
+            [data-info.util.service :as svc]
+            [schema.core :as s]))
 
 (defroutes* data-operations
+
+  (POST* "/mover" [:as {uri :uri}]
+    :tags ["bulk"]
+    :query [params StandardUserQueryParams]
+    :body [body (describe MultiRenameRequest "The paths to rename and their destination.")]
+    :return MultiRenameResult
+    :summary "Move Data Items"
+    :description (str
+"Given a list of sources and a destination in the body, moves all the sources into the given destination directory."
+(get-error-code-block "ERR_NOT_A_FOLDER, ERR_DOES_NOT_EXIST, ERR_NOT_WRITEABLE, ERR_EXISTS, ERR_TOO_MANY_PATHS, ERR_NOT_A_USER"))
+    (svc/trap uri rename/do-move params body))
 
   (context* "/data" []
     :tags ["data"]
@@ -41,7 +55,7 @@
 
     (POST* "/directories" [:as {uri :uri}]
       :tags ["bulk"]
-      :query [params SecuredQueryParamsRequired]
+      :query [params StandardUserQueryParams]
       :body [body (describe Paths "The paths to create.")]
       :return Paths
       :summary "Create Directories"
@@ -60,7 +74,7 @@ for the requesting user."
       :tags ["data-by-id"]
 
       (HEAD* "/" [:as {uri :uri}]
-        :query [{:keys [user]} SecuredQueryParamsRequired]
+        :query [{:keys [user]} StandardUserQueryParams]
         :responses {200 {:description "User has read permissions for given data item."}
                     403 {:description "User does not have read permissions for given data item."}
                     404 {:description "Data Item ID does not exist."}
@@ -70,7 +84,7 @@ for the requesting user."
         (ce/trap uri entry/id-entry data-id user))
 
       (PUT* "/name" [:as {uri :uri}]
-        :query [params SecuredQueryParamsRequired]
+        :query [params StandardUserQueryParams]
         :body [body (describe Filename "The new name of the data item.")]
         :return RenameResult
         :summary "Rename Data Item"
@@ -81,7 +95,7 @@ for the requesting user."
         (svc/trap uri rename/do-rename-uuid params body data-id))
 
       (PUT* "/dir" [:as {uri :uri}]
-        :query [params SecuredQueryParamsRequired]
+        :query [params StandardUserQueryParams]
         :body [body (describe Dirname "The new directory name of the data item.")]
         :return RenameResult
         :summary "Move Data Item"
@@ -92,7 +106,7 @@ for the requesting user."
         (svc/trap uri rename/do-move-uuid params body data-id))
 
       (PUT* "/children/dir" [:as {uri :uri}]
-        :query [params SecuredQueryParamsRequired]
+        :query [params StandardUserQueryParams]
         :body [body (describe Dirname "The new directory name of the data items.")]
         :return MultiRenameResult
         :summary "Move Data Item Contents"
@@ -102,8 +116,28 @@ for the requesting user."
     "ERR_NOT_A_FOLDER, ERR_DOES_NOT_EXIST, ERR_NOT_WRITEABLE, ERR_EXISTS, ERR_INCOMPLETE_RENAME, ERR_NOT_A_USER, ERR_TOO_MANY_PATHS"))
         (svc/trap uri rename/do-move-uuid-contents params body data-id))
 
+      (GET* "/chunks" [:as {uri :uri}]
+        :query [params ChunkParams]
+        :return ChunkReturn
+        :summary "Get File Chunk"
+        :description (str
+  "Gets the chunk of the file of the specified position and size."
+  (get-error-code-block
+    "ERR_DOES_NOT_EXIST, ERR_NOT_A_FILE, ERR_NOT_READABLE, ERR_NOT_A_USER"))
+        (svc/trap uri page-file/do-read-chunk params data-id))
+
+      (GET* "/chunks-tabular" [:as {uri :uri}]
+        :query [params TabularChunkParams]
+        :return (s/either TabularChunkDoc TabularChunkReturn)
+        :summary "Get Tabular File Chunk"
+        :description (str
+  "Gets the specified page of the tabular file, with a page size roughly corresponding to the provided size. The size is not precisely guaranteed, because partial lines cannot be correctly parsed."
+  (get-error-code-block
+    "ERR_DOES_NOT_EXIST, ERR_NOT_A_FILE, ERR_NOT_READABLE, ERR_NOT_A_USER, ERR_INVALID_PAGE, ERR_PAGE_NOT_POS, ERR_CHUNK_TOO_SMALL"))
+        (svc/trap uri page-tabular/do-read-csv-chunk params data-id))
+
       (POST* "/metadata/save" [:as {uri :uri}]
-        :query [params SecuredQueryParamsRequired]
+        :query [params StandardUserQueryParams]
         :body [body (describe MetadataSaveRequest "The metadata save request.")]
         :return FileStat
         :summary "Exporting Metadata to a File"

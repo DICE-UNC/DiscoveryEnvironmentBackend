@@ -1,5 +1,5 @@
 (ns metadactyl.service.apps.de.pipeline-edit
-  (:use [korma.core]
+  (:use [korma.core :exclude [update]]
         [korma.db :only [transaction]]
         [kameleon.core]
         [kameleon.entities]
@@ -17,8 +17,7 @@
                                       validate-pipeline
                                       verify-app-editable]]
         [metadactyl.service.apps.de.edit :only [add-app-to-user-dev-category app-copy-name]])
-  (:require [metadactyl.service.apps.de.listings :as listings]
-            [clojure.tools.logging :as log]))
+  (:require [metadactyl.service.apps.de.listings :as listings]))
 
 (defn- add-app-type
   [step]

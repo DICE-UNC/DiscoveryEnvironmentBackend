@@ -1,6 +1,7 @@
 (ns mescal.agave-v2
   (:use [medley.core :only [remove-vals take-upto]]
-        [slingshot.slingshot :only [try+ throw+]])
+        [slingshot.slingshot :only [try+ throw+]]
+        [service-logging.thread-context :only [set-ext-svc-tag!]])
   (:require [authy.core :as authy]
             [cemerick.url :as curl]
             [clj-http.client :as http]
@@ -10,6 +11,7 @@
             [mescal.util :as util])
   (:import [java.io IOException]))
 
+; FIXME Update metadactyl exception handling when this exception handling is updated
 (defn- agave-unavailable
   [e]
   (let [msg "Agave appears to be unavailable at this time"]
@@ -67,12 +69,14 @@
 
 (defn agave-get
   [token-info-fn timeout url & [{:keys [page-len]}]]
+  (set-ext-svc-tag! "agave")
   (if page-len
     (agave-get-paged token-info-fn timeout page-len url)
     (agave-get* token-info-fn timeout url)))
 
 (defn agave-post
   [token-info-fn timeout url body]
+  (set-ext-svc-tag! "agave")
   (with-refresh [token-info-fn timeout]
     ((comp :result :body)
      (http/post (str url)

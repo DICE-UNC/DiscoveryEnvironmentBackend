@@ -6,7 +6,10 @@
         [slingshot.slingshot :only [try+ throw+]])
   (:require [clojure-commons.file-utils :as ft]
             [clojure.string :as string])
-  (:import [org.irods.jargon.core.query RodsGenQueryEnum]))
+  (:import [org.irods.jargon.core.query RodsGenQueryEnum
+                                        CollectionAndDataObjectListingEntry]
+           [org.irods.jargon.core.pub CollectionAO
+                                      CollectionAndDataObjectListAndSearchAO]))
 
 (defn list-subdirs-rs
   [cm user coll-path]
@@ -115,7 +118,6 @@
                        [include-files :files list-files-in-dir]])))))
 
 (defn last-dir-in-path
-  [cm path]
   "Returns the name of the last directory in 'path'.
 
     Please note that this function works by calling
@@ -128,12 +130,12 @@
 
     Returns:
       String containing the name of the last directory in the path."
+  [{^CollectionAO collection-ao :collectionAO} path]
   (validate-path-lengths path)
   (.getCollectionLastPathComponent
-    (.findByAbsolutePath (:collectionAO cm) (ft/rm-last-slash path))))
+    (.findByAbsolutePath collection-ao (ft/rm-last-slash path))))
 
 (defn sub-collections
-  [cm path]
   "Returns a sequence of Collections that reside directly in the directory
     refered to by 'path'.
 
@@ -144,11 +146,11 @@
     Returns:
       Sequence containing Collections (the Jargon kind) representing
       directories that reside under the directory represented by 'path'."
+  [{^CollectionAndDataObjectListAndSearchAO lister :lister} path]
   (validate-path-lengths path)
-  (.listCollectionsUnderPath (:lister cm) (ft/rm-last-slash path) 0))
+  (.listCollectionsUnderPath lister (ft/rm-last-slash path) 0))
 
 (defn sub-collection-paths
-  [cm path]
   "Returns a sequence of string containing the paths for directories
     that live under 'path' in iRODS.
 
@@ -158,16 +160,16 @@
 
     Returns:
       Sequence containing the paths for directories that live under 'path'."
+  [cm path]
   (validate-path-lengths path)
   (map
-    #(.getFormattedAbsolutePath %)
+    (fn [^CollectionAndDataObjectListingEntry e] (.getFormattedAbsolutePath e))
     (sub-collections cm path)))
 
 (defn sub-dir-maps
-  [cm user list-obj filter-files]
+  [{^CollectionAndDataObjectListAndSearchAO lister :lister :as cm} user ^CollectionAndDataObjectListingEntry list-obj filter-files]
   (let [abs-path (.getFormattedAbsolutePath list-obj)
-        basename (ft/basename abs-path)
-        lister   (:lister cm)]
+        basename (ft/basename abs-path)]
     {:id            abs-path
      :label         (ft/basename abs-path)
      :permissions   (collection-perm-map cm user abs-path)
@@ -176,7 +178,7 @@
      :date-modified (str (long (.. list-obj getModifiedAt getTime)))}))
 
 (defn sub-file-maps
-  [cm user list-obj]
+  [cm user ^CollectionAndDataObjectListingEntry list-obj]
   (let [abs-path    (.getFormattedAbsolutePath list-obj)]
     {:id            abs-path
      :label         (ft/basename abs-path)
@@ -186,6 +188,6 @@
      :file-size     (.getDataSize list-obj)}))
 
 (defn list-all
-  [cm dir-path]
+  [{^CollectionAndDataObjectListAndSearchAO lister :lister} ^String dir-path]
   (validate-path-lengths dir-path)
-  (.listDataObjectsAndCollectionsUnderPath (:lister cm) dir-path))
+  (.listDataObjectsAndCollectionsUnderPath lister dir-path))

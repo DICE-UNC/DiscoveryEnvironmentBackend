@@ -33,6 +33,7 @@
 (deferr ERR_REQUEST_FAILED)
 (deferr ERR_UNCHECKED_EXCEPTION)
 (deferr ERR_NOT_OWNER)
+(deferr ERR_FORBIDDEN)
 (deferr ERR_INVALID_COPY)
 (deferr ERR_INVALID_URL)
 (deferr ERR_TICKET_EXISTS)
@@ -48,6 +49,7 @@
 (deferr ERR_TEMPORARILY_MOVED)
 (deferr ERR_REQUEST_BODY_TOO_LARGE)
 (deferr ERR_CONFLICTING_QUERY_PARAMETER_VALUES)
+(deferr ERR_SCHEMA_VALIDATION)
 
 
 (def ^:private http-status-for
@@ -59,6 +61,7 @@
    ERR_MISSING_QUERY_PARAMETER            400
    ERR_NOT_AUTHORIZED                     401
    ERR_NOT_OWNER                          403
+   ERR_FORBIDDEN                          403
    ERR_NOT_FOUND                          404
    ERR_NOT_UNIQUE                         400
    ERR_CONFLICTING_QUERY_PARAMETER_VALUES 409
@@ -152,7 +155,7 @@
 
 (defn format-exception
   "Formats the exception as a string."
-  [exception]
+  [^Throwable exception]
   (let [string-writer (StringWriter.)
         print-writer  (PrintWriter. string-writer)]
     (.printStackTrace exception print-writer)
@@ -166,9 +169,10 @@
       (log/error (format-exception (:throwable &throw-context)))
       (err-resp action (:object &throw-context)))
     (catch clj-http-error? o o)
-    (catch [:type :invalid-configuration] {:keys [reason]} (invalid-cfg-response reason))
     (catch [:type :invalid-argument] {:keys [reason arg val]} (invalid-arg-response arg val reason))
     (catch [:type :ring.swagger.schema/validation] {:keys [error]} (validation-error-response error))
+    (catch [:type :compojure.api.exception/request-validation] {:keys [error]} (validation-error-response error))
+    (catch [:type :compojure.api.exception/response-validation] {:keys [error]} (validation-error-response error))
     (catch Object e
       (log/error (format-exception (:throwable &throw-context)))
       (err-resp action (unchecked &throw-context)))))

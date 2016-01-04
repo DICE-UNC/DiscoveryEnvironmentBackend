@@ -1,9 +1,7 @@
 (ns data-info.services.entry
   "This namespace provides the business logic for all entries endpoints."
   (:use [slingshot.slingshot :only [throw+]])
-  (:require [cheshire.core :as json]
-            [clojure.string :as str]
-            [me.raynes.fs :as fs]
+  (:require [me.raynes.fs :as fs]
             [clj-icat-direct.icat :as icat]
             [clj-jargon.by-uuid :as uuid]
             [clj-jargon.init :as init]
@@ -119,11 +117,11 @@
     :base-name))
 
 
-(defn- resolve-sort-order
-  [sort-order-param]
-  (if-not sort-order-param
+(defn- resolve-sort-dir
+  [sort-dir-param]
+  (if-not sort-dir-param
     :asc
-    (case sort-order-param
+    (case sort-dir-param
       "ASC"  :asc
       "DESC" :desc
       :asc)))
@@ -222,7 +220,7 @@
                 bad-name
                 bad-path
                 sort-field
-                sort-order
+                sort-dir
                 offset
                 limit
                 info-type]}]
@@ -233,12 +231,12 @@
         entity-type (resolve-entity-type entity-type)
         info-type   (resolve-info-types info-type)
         sort-field  (resolve-sort-field sort-field)
-        sort-order  (resolve-sort-order sort-order)
+        sort-dir    (resolve-sort-dir sort-dir)
         offset      (if-not (nil? offset) offset 0)]
     (http-response/ok
       (init/with-jargon (cfg/jargon-cfg) [cm]
         (paged-dir-listing
-          cm user path entity-type badies sort-field sort-order offset limit info-type)))))
+          cm user path entity-type badies sort-field sort-dir offset limit info-type)))))
 
 
 (defn- get-path-attrs
